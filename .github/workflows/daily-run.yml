@@ -1,0 +1,41 @@
+name: Daily Risk Report
+
+on:
+  schedule:
+    # Runs at 10:00 UTC (Daily)
+    - cron: '0 10 * * *'
+  workflow_dispatch: # Allows you to click "Run Now" button manually
+
+permissions:
+  contents: read
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Risk Engine
+        # Runs your script. Ensure the script saves the image to disk (e.g., 'pltr_risk.png')
+        run: |
+          python regime_engine.py 
+
+      - name: Upload Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: risk-report-${{ github.sha }}
+          path: |
+            *.png
+            *.txt
+          retention-days: 5
