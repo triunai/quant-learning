@@ -1,0 +1,5 @@
+textblob
+beautifulsoup4
+requests
+pandas
+numpy
