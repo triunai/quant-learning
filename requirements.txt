@@ -1,3 +1,8 @@
+textblob
+beautifulsoup4
+requests
+pandas
+numpy
 yfinance>=0.2.38
 pandas>=2.2.0
 numpy>=1.26.0
