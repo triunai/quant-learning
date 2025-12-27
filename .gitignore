@@ -1,0 +1,55 @@
+# --- 🐍 Python Standard ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- 📦 Virtual Environments ---
+# Keeps your heavy library files out of git
+env/
+venv/
+.venv/
+.env
+
+# --- 📓 Jupyter Notebooks ---
+# Removes the autosave checkpoints that clutter diffs
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# --- 📉 Data & Cache (The "Heavy" Stuff) ---
+# You don't want to commit 10 years of price data
+*.csv
+*.xlsx
+*.parquet
+*.pickle
+*.pkl
+
+# yfinance often uses a local cache, keep it out
+.cache/
+yfinance_cache/
+
+# --- 🖼️ Generated Media (The "Bloat") ---
+# IMPORTANT: This prevents your repo from getting huge 
+# when you generate 50 graphs a day.
+*.png
+*.jpg
+*.svg
+*.pdf
+
+# ...BUT allow images in these specific folders (for your README/Docs)
+!assets/
+!docs/images/
+
+# --- 💻 IDE Settings ---
+.vscode/
+.idea/
+
+# --- 🔐 Secrets ---
+# NEVER commit API keys (if you add OpenAI/AlphaVantage later)
+.env
+config.py
+secrets.json
+
+# --- 🗑️ OS Junk ---
+.DS_Store
+Thumbs.db
