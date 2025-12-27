@@ -237,6 +237,16 @@ class RegimeRiskPlatform:
         print(f"    Current: {self.regime_names.get(self.current_regime, f'R{self.current_regime}')} "
               f"(prob: {current_probs[self.current_regime]:.0%})")
         
+        # FIX: Add regime diagnostics (sample counts, feature centroids)
+        print(f"    Regime diagnostics:")
+        for r in range(self.n_regimes):
+            mask = self.data['Regime'] == r
+            n_samples = np.sum(mask)
+            avg_dd = self.data.loc[mask, 'Drawdown'].mean()
+            avg_vol = self.data.loc[mask, 'Vol_20d'].mean()
+            name = self.regime_names.get(r, f"R{r}")
+            print(f"      {name}: n={n_samples}, avg_dd={avg_dd:.1%}, avg_vol={avg_vol:.1%}")
+        
         # Per-regime statistics
         self._compute_regime_stats()
         
@@ -268,7 +278,7 @@ class RegimeRiskPlatform:
         print(f"    Regime stats: ", end="")
         for r in range(self.n_regimes):
             name = self.regime_names.get(r, f"R{r}")
-            print(f"{name[:4]}(μ={self.regime_mu[r]*252:.1%}, σ={self.regime_sigma[r]*np.sqrt(252):.1%}) ", end="")
+            print(f"{name[:4]}(mu={self.regime_mu[r]*252:.1%}, sig={self.regime_sigma[r]*np.sqrt(252):.1%}) ", end="")
         print()
 
     def _compute_regime_durations(self):
@@ -304,7 +314,7 @@ class RegimeRiskPlatform:
         for r in range(self.n_regimes):
             name = self.regime_names.get(r, f"R{r}")
             d = self.regime_duration[r]
-            print(f"      {name}: avg duration {d['mean']:.1f} days (±{d['std']:.1f})")
+            print(f"      {name}: avg duration {d['mean']:.1f} days (+/-{d['std']:.1f})")
 
     def _compute_transition_matrix(self):
         """Transition matrix between regimes."""
@@ -328,15 +338,15 @@ class RegimeRiskPlatform:
     def compute_market_beta(self):
         """
         Compute beta AND ALPHA vs market.
-        CRITICAL: r = α + β·r_market + ε
-        Missing α collapses upside probability.
+        CRITICAL: r = alpha + beta*r_market + epsilon
+        Missing alpha collapses upside probability.
         """
         print(f"[MACRO] Computing alpha + beta vs {self.market_ticker}...")
         
         asset_ret = self.data['Log_Ret'].values
         market_ret = self.market_data['Log_Ret'].values
         
-        # Simple OLS: r_asset = α + β·r_market + ε
+        # Simple OLS: r_asset = alpha + beta*r_market + epsilon
         cov = np.cov(asset_ret, market_ret)
         self.market_beta = cov[0, 1] / cov[1, 1] if cov[1, 1] > 0 else 1.0
         
@@ -373,7 +383,7 @@ class RegimeRiskPlatform:
         print(f"    Idio vol: {self.idio_vol:.1%}")
         for r in range(self.n_regimes):
             name = self.regime_names.get(r, f"R{r}")
-            print(f"      {name} α: {self.regime_alpha[r]*252:+.1%}")
+            print(f"      {name} alpha: {self.regime_alpha[r]*252:+.1%}")
 
     # =========================================================================
     # VIX + ANOMALY
@@ -440,7 +450,7 @@ class RegimeRiskPlatform:
     def simulate(self):
         """
         FIXED SIMULATION:
-        - Uses ALPHA + beta factor model: r = α_regime + β·r_market + ε
+        - Uses ALPHA + beta factor model: r = alpha_regime + beta*r_market + epsilon
         - Samples residuals EMPIRICALLY (fat tails preserved)
         - Semi-Markov handles persistence (no double-counting with sticky matrix)
         - Market returns from historical distribution
@@ -454,11 +464,15 @@ class RegimeRiskPlatform:
         current_regimes = np.full(self.simulations, self.current_regime)
         remaining_duration = np.zeros(self.simulations)
         
-        # Sample initial durations from empirical distribution
+        # FIX: Sample initial durations using FORWARD RECURRENCE (residual life)
+        # When already in a regime, remaining time is NOT the full run length.
+        # Residual life is approximately uniform over [1, sampled_duration]
         for s in range(self.simulations):
             r = current_regimes[s]
             samples = self.regime_duration[r]['samples']
-            remaining_duration[s] = np.random.choice(samples)
+            full_duration = np.random.choice(samples)
+            # Forward recurrence: uniform over [1, full_duration]
+            remaining_duration[s] = np.random.randint(1, max(2, full_duration + 1))
         
         # Market returns: sample from HISTORICAL distribution (not Normal!)
         hist_market_ret = self.market_data['Log_Ret'].values
@@ -468,7 +482,7 @@ class RegimeRiskPlatform:
             prev_price = price_paths[:, d]
             
             # =================================================================
-            # FACTOR MODEL WITH ALPHA: r = α_regime + β·r_market + ε_empirical
+            # FACTOR MODEL WITH ALPHA: r = alpha_regime + beta*r_market + epsilon_empirical
             # =================================================================
             returns = np.zeros(self.simulations)
             
@@ -522,6 +536,49 @@ class RegimeRiskPlatform:
         
         return price_paths[:, 1:]
 
+    def verify_simulation_invariants(self, paths):
+        """
+        CRITICAL DIAGNOSTIC: Sim daily stats MUST match historical.
+        If these don't match, the simulator is broken before anything else matters.
+        """
+        print(f"\n[INVARIANT CHECK] Sim vs Historical daily stats:")
+        
+        # Compute simulated daily returns
+        sim_returns = np.diff(np.log(paths), axis=1).flatten()
+        hist_returns = self.data['Log_Ret'].values
+        
+        # Stats comparison
+        sim_mean = np.mean(sim_returns)
+        hist_mean = np.mean(hist_returns)
+        
+        sim_std = np.std(sim_returns)
+        hist_std = np.std(hist_returns)
+        
+        sim_skew = stats.skew(sim_returns)
+        hist_skew = stats.skew(hist_returns)
+        
+        sim_kurt = stats.kurtosis(sim_returns)
+        hist_kurt = stats.kurtosis(hist_returns)
+        
+        print(f"    {'Metric':<12} {'Sim':<12} {'Hist':<12} {'Match?':<10}")
+        print(f"    {'-'*46}")
+        
+        mean_ok = abs(sim_mean - hist_mean) < 0.001
+        std_ok = abs(sim_std - hist_std) / hist_std < 0.3
+        skew_ok = abs(sim_skew - hist_skew) < 1.0
+        kurt_ok = abs(sim_kurt - hist_kurt) < 3.0
+        
+        print(f"    {'Mean (daily)':<12} {sim_mean*100:+.3f}%{'':<5} {hist_mean*100:+.3f}%{'':<5} {'[OK]' if mean_ok else '[FAIL]'}")
+        print(f"    {'Std (daily)':<12} {sim_std*100:.3f}%{'':<6} {hist_std*100:.3f}%{'':<6} {'[OK]' if std_ok else '[FAIL]'}")
+        print(f"    {'Skewness':<12} {sim_skew:+.2f}{'':<8} {hist_skew:+.2f}{'':<8} {'[OK]' if skew_ok else '[FAIL]'}")
+        print(f"    {'Kurtosis':<12} {sim_kurt:.2f}{'':<9} {hist_kurt:.2f}{'':<9} {'[OK]' if kurt_ok else '[FAIL]'}")
+        
+        all_ok = mean_ok and std_ok and skew_ok and kurt_ok
+        if not all_ok:
+            print(f"    WARNING: Invariants don't match! Check simulation logic.")
+        
+        return {'mean_ok': mean_ok, 'std_ok': std_ok, 'skew_ok': skew_ok, 'kurt_ok': kurt_ok}
+
     # =========================================================================
     # RISK DASHBOARD
     # =========================================================================
@@ -529,11 +586,14 @@ class RegimeRiskPlatform:
     def compute_risk_metrics(self, paths):
         """Full risk dashboard: VaR, CVaR, drawdown, stop-loss, position sizing."""
         final = paths[:, -1]
-        returns = np.log(final / self.last_price)
         
-        # VaR / CVaR
-        var_95 = np.percentile(returns, 5)
-        cvar_95 = np.mean(returns[returns <= var_95])
+        # FIX: Use SIMPLE returns for interpretable VaR/CVaR (not log returns)
+        log_returns = np.log(final / self.last_price)
+        simple_returns = np.exp(log_returns) - 1  # Convert: R = e^r - 1
+        
+        # VaR / CVaR on simple returns (what humans expect)
+        var_95 = np.percentile(simple_returns, 5)
+        cvar_95 = np.mean(simple_returns[simple_returns <= var_95])
         
         # Max drawdown per path
         max_drawdowns = []
@@ -553,16 +613,16 @@ class RegimeRiskPlatform:
         stop_breach = np.any(paths <= stop_price, axis=1)
         prob_stop = np.mean(stop_breach)
         
-        # Kelly-style position sizing
-        win_rate = np.mean(returns > 0)
-        avg_win = np.mean(returns[returns > 0]) if np.any(returns > 0) else 0
-        avg_loss = abs(np.mean(returns[returns < 0])) if np.any(returns < 0) else 1
+        # FIX: Fractional Kelly with DD penalty (binary Kelly doesn't apply to continuous returns)
+        # Kelly for continuous: f* ~ mu/sigma^2, but we use fractional (0.5x) + DD cap
+        win_rate = np.mean(simple_returns > 0)
+        mu = np.mean(simple_returns)
+        sigma = np.std(simple_returns)
+        raw_kelly = mu / (sigma ** 2) if sigma > 0 else 0
         
-        if avg_loss > 0:
-            kelly = win_rate - (1 - win_rate) / (avg_win / avg_loss) if avg_win > 0 else 0
-        else:
-            kelly = 0
-        kelly = max(0, min(1, kelly))  # Bound
+        # Apply fractional Kelly (0.5x) and DD-aware penalty
+        dd_penalty = max(0, 1 - 2 * prob_dd_30)  # Scale down if DD risk > 50%
+        kelly = max(0, min(0.5, raw_kelly * 0.5 * dd_penalty))
         
         return {
             'var_95': var_95,
@@ -679,8 +739,9 @@ class RegimeRiskPlatform:
                 continue
             
             name = self.regime_names.get(r, f"R{r}")
-            mean = np.mean(returns) * 252
-            std = np.std(returns) * np.sqrt(252)
+            # FIX: Multiply by 100 to convert decimal to percent
+            mean = np.mean(returns) * 252 * 100
+            std = np.std(returns) * np.sqrt(252) * 100
             skew = stats.skew(returns)
             p5 = np.percentile(returns, 5) * 100
             p95 = np.percentile(returns, 95) * 100
@@ -698,7 +759,7 @@ class RegimeRiskPlatform:
                     current_run = 0
             avg_run = np.mean(runs) if runs else 0
             
-            print(f"    {name:12} | μ={mean:+6.1f}% | σ={std:5.1f}% | "
+            print(f"    {name:12} | mu={mean:+6.1f}% | sig={std:5.1f}% | "
                   f"skew={skew:+.2f} | 5%={p5:+.1f}% | 95%={p95:+.1f}% | "
                   f"avg_run={avg_run:.1f}d")
     
@@ -706,6 +767,8 @@ class RegimeRiskPlatform:
         """
         TRUE VALIDATION: Walk-forward (no future leakage).
         For each fold, train on past, predict on future, measure calibration.
+        
+        FIX: Define multiplier ONCE as percentage move, apply consistently.
         """
         print(f"\n[WALK-FORWARD VALIDATION] ({n_folds} folds)")
         
@@ -713,8 +776,14 @@ class RegimeRiskPlatform:
         n = len(closes)
         fold_size = n // (n_folds + 1)
         
+        # FIX: Define multiplier ONCE outside loop (as percentage move)
+        # e.g., target_up=280, last_price=189 -> up_mult=1.48 means "hit +48%"
+        up_mult = self.target_up / self.last_price
+        down_mult = self.target_down / self.last_price
+        
         predictions = []
         actuals = []
+        fold_details = []  # For debugging
         
         for fold in range(n_folds):
             train_end = (fold + 1) * fold_size
@@ -725,13 +794,10 @@ class RegimeRiskPlatform:
                 continue
             
             # Training data only
-            train_data = self.data.iloc[:train_end]
-            train_closes = train_data['Close'].values
+            train_closes = closes[:train_end]
             
-            # Compute historical hit rate on training data only
-            up_mult = self.target_up / self.last_price
-            down_mult = self.target_down / self.last_price
-            
+            # Compute historical hit rate on training data
+            # Apply SAME percentage move to each window's start price
             up_hits = 0
             windows = 0
             for t in range(len(train_closes) - self.days_ahead):
@@ -746,30 +812,30 @@ class RegimeRiskPlatform:
             else:
                 predicted_prob = 0.5
             
-            # Actual outcome on test period
+            # Actual outcome on test period (same percentage move)
             test_start_price = closes[test_start]
             test_path = closes[test_start:test_end]
             actual_hit = 1 if np.max(test_path) >= test_start_price * up_mult else 0
             
             predictions.append(predicted_prob)
             actuals.append(actual_hit)
+            fold_details.append({'fold': fold, 'pred': predicted_prob, 'actual': actual_hit})
         
         if len(predictions) > 0:
-            # Brier score
             predictions = np.array(predictions)
             actuals = np.array(actuals)
             brier = np.mean((predictions - actuals) ** 2)
-            
-            # Calibration error
             cal_error = abs(np.mean(predictions) - np.mean(actuals))
             
+            print(f"    Target: +{(up_mult-1)*100:.0f}% move (mult={up_mult:.2f})")
             print(f"    Brier Score: {brier:.3f} (lower = better, 0.25 = random)")
             print(f"    Calibration Error: {cal_error:.3f}")
             print(f"    Mean Predicted: {np.mean(predictions):.1%}")
             print(f"    Mean Actual:    {np.mean(actuals):.1%}")
             
             return {'brier': brier, 'cal_error': cal_error, 
-                    'predictions': predictions, 'actuals': actuals}
+                    'predictions': predictions, 'actuals': actuals,
+                    'fold_details': fold_details}
         
         return None
 
@@ -846,6 +912,9 @@ class RegimeRiskPlatform:
             self.walk_forward_validation()
         
         paths = self.simulate()
+        
+        # CRITICAL: Verify simulation matches historical stats
+        self.verify_simulation_invariants(paths)
         
         # Analysis
         prob_up = self.analyze_fpt(paths, self.target_up, "up")
@@ -945,21 +1014,27 @@ class RegimeRiskPlatform:
         ax3.axvline(np.median(final), color='yellow', ls='--')
         ax3.set_title("Final Price Distribution")
         
-        # 4. Transition matrix
+        # 4. EXIT Transition matrix (what simulator actually uses)
         ax4 = fig.add_subplot(gs[1, 2])
         labels = [self.regime_names.get(i, f"R{i}")[:6] for i in range(self.n_regimes)]
-        sns.heatmap(self.transition_matrix, annot=True, fmt='.2f', cmap='magma',
+        # FIX: Plot EXIT matrix (diagonal=0, renormalized) to match simulator
+        exit_matrix = self.transition_matrix.copy()
+        np.fill_diagonal(exit_matrix, 0)
+        row_sums = exit_matrix.sum(axis=1, keepdims=True)
+        exit_matrix = np.where(row_sums > 0, exit_matrix / row_sums, exit_matrix)
+        sns.heatmap(exit_matrix, annot=True, fmt='.2f', cmap='magma',
                     xticklabels=labels, yticklabels=labels, ax=ax4)
-        ax4.set_title("Regime Transitions")
+        ax4.set_title("Exit Transitions (sim)")
         
-        # 5. Risk metrics bar
+        # 5. Risk metrics bar (with clear labels)
         ax5 = fig.add_subplot(gs[2, 0])
-        metrics = ['VaR95', 'CVaR95', 'P(DD>20%)', 'P(DD>30%)', 'P(Stop)']
+        # FIX: Label clearly - VaR/CVaR are 6mo terminal, DD is path-level
+        metrics = ['VaR95 (6mo)', 'CVaR95 (6mo)', 'P(MaxDD>20%)', 'P(MaxDD>30%)', 'P(Stop)']
         values = [abs(risk['var_95'])*100, abs(risk['cvar_95'])*100, 
                   risk['prob_dd_20']*100, risk['prob_dd_30']*100, risk['prob_stop']*100]
         colors = ['red' if v > 20 else 'orange' if v > 10 else 'green' for v in values]
         ax5.barh(metrics, values, color=colors)
-        ax5.set_title("Risk Metrics (%)")
+        ax5.set_title("Risk Dashboard (%)")
         ax5.set_xlim(0, 50)
         
         # 6. Calibration comparison  
