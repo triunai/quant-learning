@@ -1,0 +1,37 @@
+name: Quant Gatekeeper
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip" # Community Best Practice: Auto-caches pip packages
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install ruff pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Lint with Ruff (The Enforcer)
+        # Replaces Flake8 (logic) and Black (formatting) in one go
+        run: |
+          # F = pyflakes (errors), E = pycodestyle (style), W = warnings
+          ruff check . --select F,E,W --ignore E501
+
+      - name: Run Tests
+        # Fails the pipeline if your logic is broken
+        run: |
+          pytest
