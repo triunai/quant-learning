@@ -12,3 +12,6 @@ scipy>=1.12.0
 scikit-learn>=1.5.0
 arch>=8.0.0
 streamlit>=1.45.0
+pytest>=8.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
