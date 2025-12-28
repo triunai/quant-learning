@@ -1,183 +1,75 @@
-# 📈 Blended Markov Chain Stock Forecaster
+# 🦅 Project PLTR: Regime Risk Platform
 
-A quantitative finance model that uses **Markov Chains** with a novel blending technique to forecast stock price distributions.
-
----
-
-## 🎯 What This Model Does
-
-This tool creates a **probabilistic forecast** of future stock prices by:
-
-1. Learning market "regimes" (states) from historical data
-2. Building transition probability matrices from two timeframes
-3. Blending them for balanced predictions
-4. Running Monte Carlo simulations to generate price distributions
+A production-grade quantitative risk engine designed to model asymmetric market regimes, capture non-linear path risks, and generate high-fidelity trade signals.
 
 ---
 
-## 🧠 Core Concepts
+## 📂 Project Structure
 
-### Market States
-
-The model discretizes daily returns into **5 quantile-based states**:
-
-| State | Label | Description |
-|-------|-------|-------------|
-| 0 | **Crash** | Bottom 20% of daily returns (worst days) |
-| 1 | **Bear** | 20-40th percentile returns |
-| 2 | **Flat** | 40-60th percentile returns (median days) |
-| 3 | **Bull** | 60-80th percentile returns |
-| 4 | **Rally** | Top 20% of daily returns (best days) |
-
-### Transition Matrix
-
-A **5×5 matrix** where each cell `[i, j]` represents:
-
-> "Given we're in state `i` today, what's the probability of being in state `j` tomorrow?"
-
-**Example interpretation from your NVO matrix:**
-- From **Crash** → **Crash**: 0.25 (25% chance of consecutive crash days)
-- From **Bull** → **Flat**: 0.23 (23% chance of cooling off after a bull day)
+| Directory | Description |
+| :--- | :--- |
+| **`/battle-tested`** | **Proprietary v7.0 Platform.** GMM-based regime clustering, semi-Markov duration modeling, and alpha/beta macro-conditioning. |
+| **`/refinery`** | **Streamlit Dashboard (v6.0)**, experimental scripts, and legacy Markov models. |
+| **`/outcome`** | Audit logs, performance reports, and signal deep-dives. |
 
 ---
 
-## ⚖️ The Blending Innovation
+## 🧠 v7.0 Core Architecture (The "Alpha" Layer)
 
-### Why Blend?
+Located in `battle-tested/PLTR-test-2.py`, this is the most advanced iteration of the engine.
 
-| Single Timeframe Problem | Blended Solution |
-|--------------------------|------------------|
-| 10Y data captures structure but misses recent trends | ✅ Combines long-term wisdom with recent behavior |
-| 5Y data captures current regime but lacks depth | ✅ Uses 70% recent + 30% historical by default |
+### 1. Regime Discovery (GMM Clustering)
+Unlike standard quantile-based models, v7.0 uses **Gaussian Mixture Models (GMM)** on multi-dimensional features `[Vol_20d, Vol_60d, Ret_20d, Drawdown]` to identify real market states:
+*   **Low Vol**: The "Quiet Bleed" / Underwater grind.
+*   **Normal**: High-alpha melt-up / trending states.
+*   **Crisis**: Left-tail volatility and regime collapse.
 
-### Formula
+### 2. Semi-Markov Duration Modeling
+Captures the **persistence** of regimes. The model doesn't just switch states daily; it models the "run length" of each state, correctly accounting for **residual life** (forward recurrence) when projecting forward.
 
-```
-Matrix_Blended = (Matrix_5Y × 0.7) + (Matrix_10Y × 0.3)
-```
-
-This is particularly useful for stocks undergoing **regime changes** (e.g., Novo Nordisk's "Ozempic Era" since ~2021).
-
----
-
-## 🎲 Monte Carlo Simulation
-
-### Process (per simulation path)
-
-```
-For each of 5000 simulations:
-    Start at current price & current state
-    
-    For each of 126 days:
-        1. Sample next state using BLENDED transition probabilities
-        2. Sample actual return from 5Y EMPIRICAL data for that state
-        3. Apply return: new_price = price × exp(log_return)
-```
-
-### Fat Tail Preservation
-
-Unlike parametric models (which assume normal distributions), this model:
-- **Samples from actual historical returns** for each state
-- **Preserves real volatility clusters and tail events**
-- **Captures skewness and kurtosis** naturally
+### 3. Macro-Conditioning (Alpha/Beta Factor Model)
+Every simulation is conditioned on market beta and regime-specific alpha:
+`r = alpha_regime + beta * r_market + epsilon_empirical`
+*   **Idiosyncratic Residuals**: Sampled empirically to preserve "fat tails" that parametric models miss.
 
 ---
 
-## 📊 Output Visualizations
+## 📊 Streamlit Dashboard (v6.0)
 
-### 1. Transition Matrix Heatmap
-
-![Transition Matrix](./transition_matrix_example.png)
-
-**How to read:**
-- **Rows** = Current state
-- **Columns** = Next day's state
-- **Colors** = Probability intensity (brighter = higher probability)
-- **Diagonal strength** = Regime persistence (states tend to repeat)
-
-### 2. Price Distribution Histogram
-
-Shows the distribution of **final prices** after 126 trading days (~6 months):
-
-- **Median line (white)**: Most likely outcome
-- **CVaR 5% line (red)**: Expected price in the worst 5% of scenarios
+Located in `refinery/dashboard.py`, the dashboard provides a visual "Mission Control" for the engine:
+*   **Live Simulation**: Run 5,000+ paths in the browser.
+*   **Cone Charts**: Probabilistic price paths with quartile shading.
+*   **Risk Dashboard**: VaR(95), CVaR(95), and Path-level Drawdown probabilities.
+*   **Transition Matrix**: Real-time visualization of regime stickiness.
 
 ---
 
-## 📐 Risk Metrics
+## 📐 Risk & Signal Logic
 
-### CVaR (Conditional Value at Risk)
+### Kelly Criterion (DD-Aware)
+The platform uses a specialized fractional Kelly formula optimized for continuous returns:
+`f* = mu / sigma^2`
+*   **Penalty Layer**: Position sizing is automatically slashed based on **P(MaxDD > 30%)**. Even with a strong edge, the engine will size at **0%** if the path risk is unsurvivable.
 
-Also known as **Expected Shortfall**, CVaR answers:
-
-> "If we're in the worst 5% of outcomes, what's the average price we'd expect?"
-
-This is more conservative than VaR because it accounts for **tail severity**, not just the threshold.
+### Invariant Validation
+The "Truth Serum" for the simulator. Every run verifies that simulated daily returns match historical **Mean, Std, Skew, and Kurtosis**.
 
 ---
 
-## 🔧 Usage
+## 🔧 Setup & Usage
 
-### Basic Usage
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-```python
-from markov_chain import BlendedMarkovModel
+# Launch the Dashboard
+streamlit run refinery/dashboard.py
 
-model = BlendedMarkovModel("AAPL")  # Any valid ticker
-model.build_models()
-model.blend_matrices(weight_5y=0.7)
-model.visualize_blended_matrix()
-
-paths = model.run_simulation(days=126, simulations=5000)
-```
-
-### Customize Blend Weights
-
-```python
-# More weight to recent data (momentum-focused)
-model.blend_matrices(weight_5y=0.9)
-
-# More weight to historical data (mean-reversion focused)
-model.blend_matrices(weight_5y=0.5)
+# Run the v7.0 Platform (CLI)
+python battle-tested/PLTR-test-2.py
 ```
 
 ---
 
-## ⚠️ Limitations & Caveats
-
-| Limitation | Implication |
-|------------|-------------|
-| **Stationarity assumption** | Assumes transition probabilities don't change over time |
-| **No exogenous factors** | Ignores earnings, macro events, sector rotation |
-| **Quantile boundaries** | State definitions vary by period (not absolute thresholds) |
-| **Path independence** | Only considers previous day's state, not longer memory |
-
----
-
-## 🛠️ Dependencies
-
-```
-yfinance>=1.0
-pandas
-numpy
-matplotlib
-seaborn
-```
-
-### yfinance 1.0 Note
-
-This code uses `auto_adjust=True` for compatibility with yfinance 1.0+, which changed from flat columns (`'Adj Close'`) to MultiIndex columns.
-
----
-
-## 📚 Further Reading
-
-- [Markov Chains in Finance](https://en.wikipedia.org/wiki/Markov_chain#Use_in_finance)
-- [Conditional Value at Risk](https://en.wikipedia.org/wiki/Expected_shortfall)
-- [Regime-Switching Models](https://en.wikipedia.org/wiki/Markov_switching_multifractal)
-
----
-
-## 📝 License
-
-MIT License - Use freely, but this is for educational purposes only. **Not financial advice.**
+## ⚠️ Disclaimer
+This is a research tool for modeling tail risks. It is NOT financial advice. Leverage and sizing are governed by the Kelly fraction which accounts for historical volatility.
