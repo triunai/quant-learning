@@ -1,0 +1,8 @@
+Signal: NEUTRAL (40%)
+Reasoning:
+- Weak edge: 17%
+- Low regime confidence
+
+Stats:
+Prob Up: 46.1%
+Prob Down: 29.6%

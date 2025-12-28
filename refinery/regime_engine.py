@@ -155,7 +155,7 @@ class RegimeRiskEngine:
         print(f"    Historical 6mo median: {hist_6mo_pct:+.1f}% (log: {self.hist_6mo_median:+.3f})")
 
     def build_markov_core(self):
-        print(f"[MARKOV] Building transition matrix...")
+        print("[MARKOV] Building transition matrix...")
 
         # Use rank-based quantiles for stability
         self.data['State_Idx'] = pd.qcut(
@@ -279,7 +279,7 @@ class RegimeRiskEngine:
         if not self.enable_vix:
             return
 
-        print(f"[VIX] Macro context...")
+        print("[VIX] Macro context...")
 
         try:
             vix = yf.download("^VIX", period="5d", progress=False)
@@ -331,7 +331,7 @@ class RegimeRiskEngine:
         if not self.enable_anomaly or not SKLEARN_OK:
             return
 
-        print(f"[ANOMALY] Isolation Forest...")
+        print("[ANOMALY] Isolation Forest...")
 
         features = pd.DataFrame({
             'Log_Ret': self.data['Log_Ret'],
@@ -356,7 +356,7 @@ class RegimeRiskEngine:
         if not self.enable_garch or not ARCH_OK:
             return
 
-        print(f"[GARCH] Volatility forecast...")
+        print("[GARCH] Volatility forecast...")
 
         try:
             returns = self.data['Log_Ret'].dropna() * 100
@@ -482,7 +482,7 @@ class RegimeRiskEngine:
         pct_3x = np.mean(final >= self.last_price * 3) * 100
         pct_half = np.mean(final <= self.last_price * 0.5) * 100
 
-        print(f"\n[SANITY CHECK]")
+        print("\n[SANITY CHECK]")
         print(f"    Sim 6mo median log-return:  {sim_median_log:+.3f}")
         print(f"    Hist 6mo median log-return: {self.hist_6mo_median:+.3f}")
         print(f"    Z-score vs history: {z_score:+.2f}", end="")
@@ -498,10 +498,10 @@ class RegimeRiskEngine:
         # ==================================================================
         hist_up_hit, hist_down_hit = self._compute_historical_hit_rates()
 
-        print(f"\n[HISTORICAL FIRST-PASSAGE VALIDATION]")
+        print("\n[HISTORICAL FIRST-PASSAGE VALIDATION]")
         print(f"    Target Up:   ${self.target_up:.0f} ({((self.target_up/self.last_price)-1)*100:+.0f}%)")
         print(f"    Target Down: ${self.target_down:.0f} ({((self.target_down/self.last_price)-1)*100:+.0f}%)")
-        print(f"    ---")
+        print("    ---")
         print(f"    Historical up-hit:   {hist_up_hit:.1%}")
         print(f"    Historical down-hit: {hist_down_hit:.1%}")
 
@@ -511,7 +511,7 @@ class RegimeRiskEngine:
         raw_diag_mean = np.mean(np.diag(self.markov_matrix_raw))
         smoothed_diag_mean = np.mean(np.diag(self.markov_matrix))
 
-        print(f"\n[PERSISTENCE CHECK]")
+        print("\n[PERSISTENCE CHECK]")
         print(f"    Raw matrix diagonal mean:      {raw_diag_mean:.2f}")
         print(f"    Smoothed matrix diagonal mean: {smoothed_diag_mean:.2f}")
         if smoothed_diag_mean > raw_diag_mean * 1.5:
@@ -669,29 +669,30 @@ class RegimeRiskEngine:
 
         self._print_summary(results, signal, sanity)
 
+        fig = None
         if plot:
-            self._plot(paths, prob_up, prob_down, times_up, times_down, signal)
+            fig = self._plot(paths, prob_up, prob_down, times_up, times_down, signal)
 
-        return results, signal
+        return results, signal, fig
 
     def _print_summary(self, results, signal, sanity):
         print(f"\n{'='*70}")
         print("SUMMARY")
         print("="*70)
 
-        print(f"\n[STATE]")
+        print("\n[STATE]")
         print(f"    Price:     ${self.last_price:.2f}")
         print(f"    Bucket:    {self.state_map[self.current_state]}")
         print(f"    Conf:      {self.regime_confidence:.0%}")
         print(f"    VIX:       {self.vix_level:.1f}")
         print(f"    Vol×:      {self.vol_scale:.2f}")
 
-        print(f"\n[TARGETS]")
+        print("\n[TARGETS]")
         print(f"    Up:   ${self.target_up:.0f} -> {results['prob_up']:.1%}")
         print(f"    Down: ${self.target_down:.0f} -> {results['prob_down']:.1%}")
 
         final = results['paths'][:, -1]
-        print(f"\n[DISTRIBUTION]")
+        print("\n[DISTRIBUTION]")
         print(f"    5th:    ${np.percentile(final, 5):.0f}")
         print(f"    Median: ${np.median(final):.0f}")
         print(f"    95th:   ${np.percentile(final, 95):.0f}")

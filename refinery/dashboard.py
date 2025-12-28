@@ -5,13 +5,11 @@ Now powered by the v7.0 Regime Risk Platform (GMM + Alpha/Beta Factor Model)
 """
 
 import streamlit as st
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
 import io
-import base64
 from datetime import datetime
 
 # Import the v7.0 engine adapter
@@ -55,7 +53,7 @@ if run_btn:
     with st.spinner(f"Running v7.0 Platform on {ticker}..."):
         try:
             engine, results, signal = run_analysis(
-                ticker, market_ticker, days_ahead, simulations, 
+                ticker, market_ticker, days_ahead, simulations,
                 n_regimes, enable_vix, run_full_calibration
             )
 
@@ -173,7 +171,7 @@ if run_btn:
 
             with tab2:
                 col_a, col_b = st.columns(2)
-                
+
                 with col_a:
                     st.subheader("🧬 Regime Diagnostics")
                     if 'regime_diagnostics' in results:
@@ -187,7 +185,7 @@ if run_btn:
                             - Avg Duration: `{rd['avg_duration']:.1f} days`
                             """)
                             st.divider()
-                
+
                 with col_b:
                     st.subheader("🌍 Macro Conditioning")
                     if 'macro' in results:
@@ -198,9 +196,9 @@ if run_btn:
                         st.write(f"**VIX Level:** {macro['vix']:.1f}")
                         st.write(f"**GARCH Vol:** {macro['garch_vol']:.1%}")
                         st.write(f"**Realized Vol:** {macro['realized_vol']:.1%}")
-                
+
                 st.divider()
-                
+
                 st.subheader("📋 Signal Reasoning")
                 for reason in signal['reasoning']:
                     st.write(f"- {reason}")
@@ -223,7 +221,7 @@ if run_btn:
             with tab3:
                 st.subheader("📋 Copy Full Report to Clipboard")
                 st.caption("Click the copy icon in the top-right corner of the code block below.")
-                
+
                 # Build comprehensive report JSON
                 report = {
                     "timestamp": datetime.now().isoformat(),
@@ -257,13 +255,13 @@ if run_btn:
                         "p95": float(np.percentile(paths[:, -1], 95))
                     }
                 }
-                
+
                 # Display as copyable code block
                 report_json = json.dumps(report, indent=2, default=str)
                 st.code(report_json, language="json")
-                
+
                 st.divider()
-                
+
                 # Download chart as PNG
                 st.subheader("📥 Download Chart")
                 buf = io.BytesIO()
@@ -284,9 +282,9 @@ else:
     st.info("Configure parameters in the sidebar and click **RUN SIMULATION** to start.")
     st.markdown("""
     ### 🦅 Project PLTR - v7.0 Features
-    
+
     This dashboard is now powered by the **v7.0 Regime Risk Platform**:
-    
+
     *   **GMM Clustering**: Real regimes from slow features (Vol, Trend, Drawdown), not return buckets.
     *   **Alpha/Beta Factor Model**: `r = alpha_regime + beta * r_market + epsilon`
     *   **Semi-Markov Duration**: Captures regime persistence with forward recurrence.
