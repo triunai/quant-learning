@@ -20,6 +20,9 @@ spec = importlib.util.spec_from_file_location(
     "pltr_test_2",
     os.path.join(BATTLE_TESTED_PATH, "PLTR-test-2.py")
 )
+if spec is None or spec.loader is None:
+    raise ImportError(f"Failed to load module from {os.path.join(BATTLE_TESTED_PATH, 'PLTR-test-2.py')}")
+
 pltr_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pltr_module)
 
