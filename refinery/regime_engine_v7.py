@@ -7,6 +7,7 @@ for clean Streamlit integration without modifying the source.
 
 import sys
 import os
+import importlib.util
 
 # Add battle-tested to path for import
 BATTLE_TESTED_PATH = os.path.join(os.path.dirname(__file__), '..', 'battle-tested')
@@ -15,11 +16,13 @@ if BATTLE_TESTED_PATH not in sys.path:
 
 # Import the production v7.0 platform
 # Note: This file is named with a hyphen, so we use importlib
-import importlib.util
 spec = importlib.util.spec_from_file_location(
     "pltr_test_2",
     os.path.join(BATTLE_TESTED_PATH, "PLTR-test-2.py")
 )
+if spec is None or spec.loader is None:
+    raise ImportError(f"Failed to load module from {os.path.join(BATTLE_TESTED_PATH, 'PLTR-test-2.py')}")
+
 pltr_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pltr_module)
 
@@ -54,7 +57,7 @@ class RegimeRiskEngineV7:
             stop_loss_pct=stop_loss_pct,
             n_regimes=n_regimes
         )
-        
+
         self.ticker = ticker
         self.days_ahead = days_ahead
         self.simulations = simulations
@@ -73,7 +76,7 @@ class RegimeRiskEngineV7:
     def ingest_data(self):
         """Load and prepare data via the underlying platform."""
         self.platform.ingest_data()
-        
+
         # Sync exposed attributes
         self.last_price = self.platform.last_price
         self.target_up = self.platform.target_up
@@ -83,7 +86,7 @@ class RegimeRiskEngineV7:
     def run(self, plot=False, run_full_calibration=False):
         """
         Execute the v7.0 simulation and return Streamlit-compatible results.
-        
+
         Returns:
             results (dict): Contains paths, prob_up, prob_down, risk, etc.
             signal (dict): Contains signal, confidence, reasoning.
@@ -95,22 +98,22 @@ class RegimeRiskEngineV7:
             self.platform.check_macro_context()
         self.platform.run_garch()
         self.platform.compute_historical_validation()
-        
+
         if run_full_calibration:
             self.platform.bucket_asymmetry_diagnostics()
             self.platform.multi_threshold_calibration()
             self.platform.walk_forward_validation()
-        
+
         # Run simulation
         paths = self.platform.simulate()
         self.platform.verify_simulation_invariants(paths)
-        
+
         # Compute outputs
         prob_up = self.platform.analyze_fpt(paths, self.platform.target_up, "up")
         prob_down = self.platform.analyze_fpt(paths, self.platform.target_down, "down")
         risk = self.platform.compute_risk_metrics(paths)
         signal = self.platform.generate_signal(prob_up, prob_down, risk)
-        
+
         # Sync exposed attributes for dashboard
         self.current_regime = self.platform.current_regime
         self.regime_names = self.platform.regime_names
@@ -171,7 +174,7 @@ class RegimeRiskEngineV7:
                 'realized_vol': self.realized_vol,
             }
         }
-        
+
         return results, signal
 
 

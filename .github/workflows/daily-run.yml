@@ -22,14 +22,14 @@ jobs:
           python-version: "3.10"
           cache: "pip"
 
-      - name: Install Dependencies
+      - name: Setup Environment
         run: |
-          pip install -r requirements.txt
+          bash scripts/setup_env.sh
 
       - name: Run Risk Engine
         # Runs your script. Ensure the script saves the image to disk (e.g., 'pltr_risk.png')
         run: |
-          python regime_engine.py 
+          python run_risk.py
 
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4

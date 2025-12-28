@@ -19,11 +19,15 @@ jobs:
           python-version: "3.10"
           cache: "pip" # Community Best Practice: Auto-caches pip packages
 
-      - name: Install Dependencies
+      - name: Setup Environment
         run: |
-          pip install --upgrade pip
           pip install ruff pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          bash scripts/setup_env.sh
+
+      - name: Type Check with MyPy
+        run: |
+          # Check for type errors in the codebase
+          mypy . --ignore-missing-imports
 
       - name: Lint with Ruff (The Enforcer)
         # Replaces Flake8 (logic) and Black (formatting) in one go
