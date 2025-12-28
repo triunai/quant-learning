@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import pandas as pd
-import matplotlib.pyplot as plt
 
 class BaseSignal(ABC):
     def __init__(self, name: str):
@@ -9,7 +8,7 @@ class BaseSignal(ABC):
         self.confidence = 0.0  # 0 to 100
         self.position_sizing_mult = 1.0  # 0 to 1
         self.time_horizon = 1  # days
-        self.reasoning = []
+        self.reasoning: list[str] = []
 
     @abstractmethod
     def fit(self, data: pd.DataFrame):

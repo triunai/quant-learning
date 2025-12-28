@@ -3,21 +3,40 @@ import pandas as pd
 import yfinance as yf
 from scipy import stats
 from .base_signal import BaseSignal
+import logging
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 class VolCompressionSignal(BaseSignal):
-    def __init__(self):
+    def __init__(self, lookback: int = 20, history_window: int = 252):
         super().__init__("VolCompression")
-        self.lookback = 20
-        self.history_window = 252 # 1 year for percentile calculation
+        self.lookback = lookback
+        self.history_window = history_window  # Default: 1 year for percentile calculation
         self.rv_percentile = 0.0
         self.range_percentile = 0.0
         self.vix_percentile = 0.0
+
+        # Caching for VIX data
+        self.vix_data = None
+        self.vix_last_fetched = None
+        self.vix_cache_duration = timedelta(hours=1)
 
     def fit(self, data: pd.DataFrame):
         """
         In this context, 'fit' prepares the historical distributions.
         We assume 'data' contains enough history.
         """
+        # Validate input
+        required_cols = ['High', 'Low', 'Close']
+        missing_cols = [col for col in required_cols if col not in data.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+
+        min_length = self.lookback + self.history_window
+        if len(data) < min_length:
+            logger.warning(f"Data length ({len(data)}) is less than recommended minimum ({min_length}). Percentiles may be inaccurate.")
+
         # Calculate metrics
         df = data.copy()
 
@@ -32,6 +51,25 @@ class VolCompressionSignal(BaseSignal):
         df['Range_Smooth'] = df['Norm_Range'].rolling(self.lookback).mean()
 
         self.historical_data = df
+
+    def _fetch_vix(self, force_refresh: bool = False):
+        """Fetch VIX data with caching."""
+        if (self.vix_data is None or force_refresh or
+            (self.vix_last_fetched and (datetime.now() - self.vix_last_fetched) > self.vix_cache_duration)):
+            try:
+                logger.info("Fetching VIX data...")
+                vix = yf.download("^VIX", period="1y", progress=False)
+                if isinstance(vix.columns, pd.MultiIndex):
+                    vix.columns = vix.columns.get_level_values(0)
+
+                if not vix.empty:
+                    self.vix_data = vix
+                    self.vix_last_fetched = datetime.now()
+                else:
+                    logger.warning("Fetched VIX data is empty.")
+            except Exception as e:
+                logger.warning(f"VIX fetch failed: {e}")
+                # Keep old data if fetch fails, or None if never fetched
 
     def predict(self, current_data: pd.DataFrame = None):
         """
@@ -56,7 +94,10 @@ class VolCompressionSignal(BaseSignal):
         latest = df.iloc[-1]
 
         # Get historical window for percentiles
-        history = df.iloc[-self.history_window:]
+        if len(df) < self.history_window:
+            history = df
+        else:
+            history = df.iloc[-self.history_window:]
 
         # 1. RV Percentile
         rv_rank = stats.percentileofscore(history['RV'].dropna(), latest['RV'])
@@ -67,24 +108,14 @@ class VolCompressionSignal(BaseSignal):
         self.range_percentile = range_rank / 100.0
 
         # 3. VIX Percentile (Fetch VIX if not present)
-        vix_score = 0.5 # Default neutral
-        try:
-            # We need to fetch VIX separately or assume it's passed?
-            # Ideally passed, but for self-containment we can try fetching.
-            # NOTE: This might slow down 'predict' if called frequently.
-            # For this 'factory', let's assume we can fetch just the latest VIX.
-            vix = yf.download("^VIX", period="1y", progress=False)
-            if isinstance(vix.columns, pd.MultiIndex):
-                vix.columns = vix.columns.get_level_values(0)
+        # Refresh VIX data if needed
+        self._fetch_vix()
 
-            if not vix.empty:
-                vix_val = float(vix['Close'].iloc[-1])
-                vix_rank = stats.percentileofscore(vix['Close'].values, vix_val)
-                self.vix_percentile = float(vix_rank) / 100.0
-            else:
-                self.vix_percentile = 0.5
-        except Exception as e:
-            print(f"VIX fetch failed: {e}")
+        if self.vix_data is not None and not self.vix_data.empty:
+            vix_val = float(self.vix_data['Close'].iloc[-1])
+            vix_rank = stats.percentileofscore(self.vix_data['Close'].values, vix_val)
+            self.vix_percentile = float(vix_rank) / 100.0
+        else:
             self.vix_percentile = 0.5
 
         # COMBINE

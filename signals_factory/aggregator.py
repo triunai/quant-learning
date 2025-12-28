@@ -2,6 +2,8 @@ from typing import List, Dict
 from .base_signal import BaseSignal
 
 class SignalAggregator:
+    DEFAULT_WEIGHT = 0.1
+
     def __init__(self, signals: List[BaseSignal]):
         self.signals = signals
         # Weights could be dynamic based on backtest performance
@@ -28,7 +30,7 @@ class SignalAggregator:
             # Ideally signals are already updated.
             # But let's assume we read the state from the signal objects.
 
-            weight = self.weights.get(signal.name, 0.1)
+            weight = self.weights.get(signal.name, self.DEFAULT_WEIGHT)
 
             # Sizing is multiplicative (conservative)
             combined_sizing *= signal.position_sizing_mult
@@ -45,7 +47,7 @@ class SignalAggregator:
                 'reasoning': signal.reasoning
             }
 
-        final_direction = 0
+        final_direction = 0.0
         if total_weight > 0:
             final_direction = weighted_direction / total_weight
 
