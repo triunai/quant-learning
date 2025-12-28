@@ -6,6 +6,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+
 class JjulesNoiseMonitor:
     def __init__(self, ticker="PLTR"):
         self.ticker = ticker
@@ -60,7 +61,8 @@ class JjulesNoiseMonitor:
             print(f"    [!] Error fetching news: {e}")
 
     def analyze_sentiment(self):
-        if not self.news_cache: return
+        if not self.news_cache:
+            return
         total_score = 0
         print("\n[JJULES] Decoding Narrative...")
         for news in self.news_cache:
@@ -69,19 +71,27 @@ class JjulesNoiseMonitor:
             blob_score = TextBlob(headline).sentiment.polarity
             kw_score = 0
             for word, weight in self.keywords['bullish'].items():
-                if word in headline_lower: kw_score += weight
+                if word in headline_lower:
+                    kw_score += weight
             for word, weight in self.keywords['bearish'].items():
-                if word in headline_lower: kw_score -= weight
+                if word in headline_lower:
+                    kw_score -= weight
             total_score += blob_score + (kw_score * 0.5)
         self.sentiment_score = max(min(total_score / 3, 1.0), -1.0)
-        if self.sentiment_score > 0.3: self.narrative_regime = "EUPHORIA"
-        elif self.sentiment_score > 0.1: self.narrative_regime = "OPTIMISM"
-        elif self.sentiment_score < -0.3: self.narrative_regime = "PANIC"
-        elif self.sentiment_score < -0.1: self.narrative_regime = "FEAR"
-        else: self.narrative_regime = "NOISE"
+        if self.sentiment_score > 0.3:
+            self.narrative_regime = "EUPHORIA"
+        elif self.sentiment_score > 0.1:
+            self.narrative_regime = "OPTIMISM"
+        elif self.sentiment_score < -0.3:
+            self.narrative_regime = "PANIC"
+        elif self.sentiment_score < -0.1:
+            self.narrative_regime = "FEAR"
+        else:
+            self.narrative_regime = "NOISE"
 
     def get_report_context(self):
         return f"[NARRATIVE] Score: {self.sentiment_score:+.2f} ({self.narrative_regime})"
+
 
 if __name__ == "__main__":
     monitor = JjulesNoiseMonitor()

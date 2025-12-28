@@ -1,8 +1,12 @@
+import numpy as np
+
+
 def apply_narrative_tilt(self, sentiment_score):
     """
     Tilts the Markov matrix based on Jjules' sentiment score.
     """
-    if abs(sentiment_score) < 0.1: return
+    if abs(sentiment_score) < 0.1:
+        return
     print(f"[JJULES] Tilting Matrix by {sentiment_score:+.2f}...")
     tilt_strength = 0.05 * abs(sentiment_score)
     matrix = self.markov_matrix.copy()

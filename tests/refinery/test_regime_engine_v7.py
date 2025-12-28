@@ -1,4 +1,8 @@
-"""Unit tests for refinery/regime_engine_v7.py - Regime Engine V7."""
+"""Unit tests for refinery/regime_engine_v7.py - Regime Engine V7 Wrapper.
+
+Tests the RegimeRiskEngineV7 wrapper class that provides a Streamlit-friendly
+interface to the battle-tested RegimeRiskPlatform.
+"""
 import pytest
 import numpy as np
 import pandas as pd
@@ -6,574 +10,736 @@ import sys
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
+# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from refinery.regime_engine_v7 import RegimeEngineV7
 
+# ==============================================================================
+# FIXTURES
+# ==============================================================================
+
+@pytest.fixture
+def sample_price_data():
+    """Generate realistic sample OHLCV price data for testing."""
+    np.random.seed(42)
+    n_days = 504  # 2 years of trading days
+    dates = pd.date_range(start='2022-01-01', periods=n_days, freq='B')
+    
+    # Generate realistic price path with drift and volatility
+    daily_returns = np.random.normal(0.0005, 0.02, n_days)
+    close_prices = 100 * np.exp(np.cumsum(daily_returns))
+    
+    data = pd.DataFrame({
+        'Open': close_prices * (1 + np.random.uniform(-0.005, 0.005, n_days)),
+        'High': close_prices * (1 + np.random.uniform(0.005, 0.02, n_days)),
+        'Low': close_prices * (1 - np.random.uniform(0.005, 0.02, n_days)),
+        'Close': close_prices,
+        'Adj Close': close_prices,
+        'Volume': np.random.randint(1_000_000, 50_000_000, n_days)
+    }, index=dates)
+    
+    return data
+
+
+@pytest.fixture
+def mock_yfinance(sample_price_data):
+    """Create a mock for yfinance.download that returns sample data."""
+    def _download(*args, **kwargs):
+        return sample_price_data.copy()
+    return _download
+
+
+# ==============================================================================
+# TEST: INITIALIZATION
+# ==============================================================================
 
 class TestRegimeEngineV7Initialization:
-    """Test suite for RegimeEngineV7 initialization."""
+    """Test suite for RegimeRiskEngineV7 initialization."""
     
-    def test_init_with_defaults(self):
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_init_with_defaults(self, mock_platform_class):
         """Test initialization with default parameters."""
-        engine = RegimeEngineV7(ticker="TEST")
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
+        
+        engine = RegimeRiskEngineV7(ticker="TEST")
+        
         assert engine.ticker == "TEST"
         assert engine.days_ahead == 126
         assert engine.simulations == 5000
-        assert engine.n_regimes == 3
+        mock_platform_class.assert_called_once()
     
-    def test_init_with_custom_parameters(self):
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_init_with_custom_parameters(self, mock_platform_class):
         """Test initialization with custom parameters."""
-        engine = RegimeEngineV7(
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
+        
+        engine = RegimeRiskEngineV7(
             ticker="AAPL",
             days_ahead=252,
             simulations=10000,
             n_regimes=4,
             market_ticker="SPY"
         )
+        
         assert engine.ticker == "AAPL"
         assert engine.days_ahead == 252
         assert engine.simulations == 10000
-        assert engine.n_regimes == 4
-        assert engine.market_ticker == "SPY"
+        
+        # Verify platform was initialized with correct params
+        call_kwargs = mock_platform_class.call_args[1]
+        assert call_kwargs['ticker'] == "AAPL"
+        assert call_kwargs['days_ahead'] == 252
+        assert call_kwargs['simulations'] == 10000
+        assert call_kwargs['n_regimes'] == 4
+        assert call_kwargs['market_ticker'] == "SPY"
     
-    def test_init_with_targets(self):
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_init_with_targets(self, mock_platform_class):
         """Test initialization with price targets."""
-        engine = RegimeEngineV7(
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
+        
+        engine = RegimeRiskEngineV7(
             ticker="TEST",
             target_up=150.0,
             target_down=80.0
         )
+        
         assert engine.target_up == 150.0
         assert engine.target_down == 80.0
     
-    def test_init_with_stop_loss(self):
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_init_with_stop_loss(self, mock_platform_class):
         """Test initialization with custom stop loss."""
-        engine = RegimeEngineV7(ticker="TEST", stop_loss_pct=0.20)
-        assert engine.stop_loss_pct == 0.20
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", stop_loss_pct=0.20)
+        
+        call_kwargs = mock_platform_class.call_args[1]
+        assert call_kwargs['stop_loss_pct'] == 0.20
     
-    def test_initial_state_is_none(self):
-        """Test that data is None before ingestion."""
-        engine = RegimeEngineV7(ticker="TEST")
-        assert engine.data is None
-        assert engine.market_data is None
-        assert engine.gmm is None
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_initial_state(self, mock_platform_class):
+        """Test that initial state is correctly set."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
+        
+        engine = RegimeRiskEngineV7(ticker="TEST")
+        
+        assert engine.last_price == 0
+        assert engine.current_regime == 0
+        assert engine.regime_names == {}
+        assert engine.market_beta == 0
+        assert engine.transition_matrix is None
 
+
+# ==============================================================================
+# TEST: DATA INGESTION
+# ==============================================================================
 
 class TestRegimeEngineV7DataIngestion:
-    """Test suite for data ingestion methods."""
+    """Test suite for data ingestion via the wrapper."""
     
-    @patch('yfinance.download')
-    def test_ingest_data_success(self, mock_download, sample_price_data):
-        """Test successful data ingestion."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_ingest_data_calls_platform(self, mock_platform_class):
+        """Test that ingest_data delegates to platform."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
+        mock_platform = MagicMock()
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.realized_vol = 0.25
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST")
         engine.ingest_data()
         
-        assert engine.data is not None
-        assert engine.market_data is not None
-        assert len(engine.data) > 0
-        assert 'Log_Ret' in engine.data.columns
+        mock_platform.ingest_data.assert_called_once()
     
-    @patch('yfinance.download')
-    def test_ingest_creates_log_returns(self, mock_download, sample_price_data):
-        """Test that log returns are calculated."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_ingest_syncs_attributes(self, mock_platform_class):
+        """Test that ingest_data syncs key attributes from platform."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
+        mock_platform = MagicMock()
+        mock_platform.last_price = 150.0
+        mock_platform.target_up = 180.0
+        mock_platform.target_down = 120.0
+        mock_platform.realized_vol = 0.35
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST")
         engine.ingest_data()
         
-        assert 'Log_Ret' in engine.data.columns
-        # Check log return calculation is correct
-        expected = np.log(engine.data['Close'] / engine.data['Close'].shift(1))
-        pd.testing.assert_series_equal(
-            engine.data['Log_Ret'].dropna(),
-            expected.dropna(),
-            check_names=False
-        )
-    
-    @patch('yfinance.download')
-    def test_ingest_creates_slow_features(self, mock_download, sample_price_data):
-        """Test that slow features are created."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        
-        # Check for slow feature columns
-        expected_features = ['Vol_20d', 'Vol_60d', 'Ret_20d', 'Drawdown']
-        for feature in expected_features:
-            assert feature in engine.data.columns, f"Missing feature: {feature}"
-    
-    @patch('yfinance.download')
-    def test_ingest_handles_multiindex_columns(self, mock_download, sample_price_data):
-        """Test handling of MultiIndex columns from yfinance."""
-        # Create MultiIndex columns (yfinance 1.0+ format)
-        multi_df = sample_price_data.copy()
-        multi_df.columns = pd.MultiIndex.from_product([multi_df.columns, ['TEST']])
-        mock_download.return_value = multi_df
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        
-        # Should flatten columns correctly
-        assert not isinstance(engine.data.columns, pd.MultiIndex)
-    
-    @patch('yfinance.download')
-    def test_ingest_sets_last_price(self, mock_download, sample_price_data):
-        """Test that last price is correctly set."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        
-        assert engine.last_price == pytest.approx(sample_price_data['Close'].iloc[-1])
-    
-    @patch('yfinance.download')
-    def test_ingest_computes_realized_vol(self, mock_download, sample_price_data):
-        """Test that realized volatility is computed."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        
-        assert engine.realized_vol > 0
-        assert engine.realized_vol < 5.0  # Sanity check (500% annual vol is extreme)
-    
-    @patch('yfinance.download')
-    def test_ingest_aligns_asset_and_market_data(self, mock_download, sample_price_data):
-        """Test that asset and market data are aligned on dates."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST", market_ticker="SPY")
-        engine.ingest_data()
-        
-        # Indices should match
-        pd.testing.assert_index_equal(engine.data.index, engine.market_data.index)
-    
-    @patch('yfinance.download')
-    def test_ingest_handles_missing_data(self, mock_download):
-        """Test handling of missing/NaN data."""
-        # Create data with NaNs
-        dates = pd.date_range('2020-01-01', periods=100)
-        data_with_nan = pd.DataFrame({
-            'Close': [100.0] * 50 + [np.nan] * 25 + [105.0] * 25,
-            'Volume': [1000000] * 100
-        }, index=dates)
-        mock_download.return_value = data_with_nan
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        
-        # Should drop NaN rows
-        assert engine.data['Close'].isna().sum() == 0
+        assert engine.last_price == 150.0
+        assert engine.target_up == 180.0
+        assert engine.target_down == 120.0
+        assert engine.realized_vol == 0.35
 
 
-class TestRegimeEngineV7RegimeModel:
-    """Test suite for regime modeling methods."""
+# ==============================================================================
+# TEST: RUN METHOD
+# ==============================================================================
+
+class TestRegimeEngineV7Run:
+    """Test suite for the main run() method."""
     
-    @patch('yfinance.download')
-    def test_build_regime_model_creates_regimes(self, mock_download, sample_price_data):
-        """Test that regime model creates regime assignments."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_returns_tuple(self, mock_platform_class):
+        """Test that run() returns (results, signal) tuple."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST", n_regimes=3)
-        engine.ingest_data()
-        engine.build_regime_model()
+        # Setup mock platform
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {0: "Crash", 1: "Normal", 2: "Rally"}
+        mock_platform.market_beta = 1.2
+        mock_platform.market_alpha = 0.0002
+        mock_platform.regime_alpha = {0: -0.001, 1: 0.0, 2: 0.001}
+        mock_platform.regime_mu = {0: -0.001, 1: 0.0005, 2: 0.002}
+        mock_platform.regime_sigma = {0: 0.03, 1: 0.015, 2: 0.025}
+        mock_platform.regime_duration = {0: {'mean': 10}, 1: {'mean': 50}, 2: {'mean': 20}}
+        mock_platform.transition_matrix = np.array([[0.9, 0.08, 0.02], [0.05, 0.9, 0.05], [0.02, 0.08, 0.9]])
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.6
+        mock_platform.hist_down_hit = 0.3
+        mock_platform.data = pd.DataFrame({
+            'Regime': [0, 1, 1, 2, 1],
+            'Drawdown': [-0.05, -0.02, -0.01, -0.03, -0.02],
+            'Vol_20d': [0.03, 0.015, 0.018, 0.025, 0.016]
+        })
         
-        assert 'Regime' in engine.data.columns
-        assert engine.data['Regime'].nunique() <= 3
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100 + 80
+        mock_platform.analyze_fpt.return_value = 0.65
+        mock_platform.compute_risk_metrics.return_value = {'var_95': -0.15, 'cvar_95': -0.22}
+        mock_platform.generate_signal.return_value = {'signal': 'HOLD', 'confidence': 0.7}
+        
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        results, signal = engine.run()
+        
+        assert isinstance(results, dict)
+        assert isinstance(signal, dict)
     
-    @patch('yfinance.download')
-    def test_build_regime_model_sets_current_regime(self, mock_download, sample_price_data):
-        """Test that current regime is set."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_results_structure(self, mock_platform_class):
+        """Test that results dict has expected keys."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
+        # Setup mock platform
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {0: "Crash", 1: "Normal", 2: "Rally"}
+        mock_platform.market_beta = 1.2
+        mock_platform.market_alpha = 0.0002
+        mock_platform.regime_alpha = {0: -0.001, 1: 0.0, 2: 0.001}
+        mock_platform.regime_mu = {0: -0.001, 1: 0.0005, 2: 0.002}
+        mock_platform.regime_sigma = {0: 0.03, 1: 0.015, 2: 0.025}
+        mock_platform.regime_duration = {0: {'mean': 10}, 1: {'mean': 50}, 2: {'mean': 20}}
+        mock_platform.transition_matrix = np.array([[0.9, 0.08, 0.02], [0.05, 0.9, 0.05], [0.02, 0.08, 0.9]])
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.6
+        mock_platform.hist_down_hit = 0.3
+        mock_platform.data = pd.DataFrame({
+            'Regime': [0, 1, 1, 2, 1],
+            'Drawdown': [-0.05, -0.02, -0.01, -0.03, -0.02],
+            'Vol_20d': [0.03, 0.015, 0.018, 0.025, 0.016]
+        })
         
-        assert engine.current_regime is not None
-        assert 0 <= engine.current_regime < engine.n_regimes
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100 + 80
+        mock_platform.analyze_fpt.return_value = 0.65
+        mock_platform.compute_risk_metrics.return_value = {'var_95': -0.15, 'cvar_95': -0.22}
+        mock_platform.generate_signal.return_value = {'signal': 'HOLD', 'confidence': 0.7}
+        
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        results, signal = engine.run()
+        
+        # Check required keys
+        assert 'paths' in results
+        assert 'prob_up' in results
+        assert 'prob_down' in results
+        assert 'risk' in results
+        assert 'regime_diagnostics' in results
+        assert 'sanity' in results
+        assert 'macro' in results
     
-    @patch('yfinance.download')
-    def test_compute_regime_stats_creates_parameters(self, mock_download, sample_price_data):
-        """Test that regime statistics are computed."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_calls_build_methods(self, mock_platform_class):
+        """Test that run() calls all the build/compute methods on platform."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
+        # Setup mock platform
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.5
+        mock_platform.hist_down_hit = 0.5
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
         
-        # Should have mu and sigma for each regime
-        assert len(engine.regime_mu) == engine.n_regimes
-        assert len(engine.regime_sigma) == engine.n_regimes
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        for r in range(engine.n_regimes):
-            assert r in engine.regime_mu
-            assert r in engine.regime_sigma
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        engine.run()
+        
+        # Verify all methods were called
+        mock_platform.build_regime_model.assert_called_once()
+        mock_platform.compute_market_beta.assert_called_once()
+        mock_platform.check_macro_context.assert_called_once()
+        mock_platform.run_garch.assert_called_once()
+        mock_platform.compute_historical_validation.assert_called_once()
+        mock_platform.simulate.assert_called_once()
+        mock_platform.verify_simulation_invariants.assert_called_once()
     
-    @patch('yfinance.download')
-    def test_regime_durations_are_positive(self, mock_download, sample_price_data):
-        """Test that regime durations are positive."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_with_calibration(self, mock_platform_class):
+        """Test that run(run_full_calibration=True) calls calibration methods."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
+        # Setup mock platform
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.5
+        mock_platform.hist_down_hit = 0.5
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
         
-        for r in range(engine.n_regimes):
-            assert engine.regime_duration[r]['mean'] > 0
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
+        
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        engine.run(run_full_calibration=True)
+        
+        # Verify calibration methods were called
+        mock_platform.bucket_asymmetry_diagnostics.assert_called_once()
+        mock_platform.multi_threshold_calibration.assert_called_once()
+        mock_platform.walk_forward_validation.assert_called_once()
     
-    @patch('yfinance.download')
-    def test_transition_matrix_is_stochastic(self, mock_download, sample_price_data):
-        """Test that transition matrix rows sum to 1."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_without_calibration(self, mock_platform_class):
+        """Test that run() without calibration skips calibration methods."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
+        # Setup mock platform
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.5
+        mock_platform.hist_down_hit = 0.5
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
         
-        # Each row should sum to 1 (stochastic matrix)
-        row_sums = engine.transition_matrix.sum(axis=1)
-        np.testing.assert_allclose(row_sums, 1.0, rtol=1e-5)
-    
-    @patch('yfinance.download')
-    def test_transition_matrix_has_correct_shape(self, mock_download, sample_price_data):
-        """Test that transition matrix has correct dimensions."""
-        mock_download.return_value = sample_price_data
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        engine = RegimeEngineV7(ticker="TEST", n_regimes=3)
-        engine.ingest_data()
-        engine.build_regime_model()
+        mock_platform_class.return_value = mock_platform
         
-        assert engine.transition_matrix.shape == (3, 3)
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        engine.run(run_full_calibration=False)
+        
+        # Verify calibration methods were NOT called
+        mock_platform.bucket_asymmetry_diagnostics.assert_not_called()
+        mock_platform.multi_threshold_calibration.assert_not_called()
+        mock_platform.walk_forward_validation.assert_not_called()
 
 
-class TestRegimeEngineV7MacroConditioning:
-    """Test suite for macro conditioning (beta/alpha)."""
+# ==============================================================================
+# TEST: ATTRIBUTE SYNCING
+# ==============================================================================
+
+class TestRegimeEngineV7AttributeSync:
+    """Test that wrapper correctly syncs attributes from platform."""
     
-    @patch('yfinance.download')
-    def test_compute_market_beta_sets_beta(self, mock_download, sample_price_data):
-        """Test that market beta is computed."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_run_syncs_regime_attributes(self, mock_platform_class):
+        """Test that run() syncs regime-related attributes."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 2
+        mock_platform.regime_names = {0: "Bear", 1: "Neutral", 2: "Bull"}
+        mock_platform.market_beta = 1.5
+        mock_platform.market_alpha = 0.0003  # Daily
+        mock_platform.regime_alpha = {0: -0.002, 1: 0.0, 2: 0.002}  # Daily
+        mock_platform.regime_mu = {0: -0.001, 1: 0.0005, 2: 0.002}  # Daily
+        mock_platform.regime_sigma = {0: 0.025, 1: 0.015, 2: 0.02}  # Daily
+        mock_platform.regime_duration = {0: {'mean': 15}, 1: {'mean': 60}, 2: {'mean': 25}}
+        mock_platform.transition_matrix = np.array([[0.85, 0.1, 0.05], [0.1, 0.8, 0.1], [0.05, 0.1, 0.85]])
+        mock_platform.last_price = 125.0
+        mock_platform.target_up = 150.0
+        mock_platform.target_down = 100.0
+        mock_platform.vix_level = 22.0
+        mock_platform.garch_vol = 0.28
+        mock_platform.realized_vol = 0.30
+        mock_platform.idio_vol = 0.18
+        mock_platform.hist_up_hit = 0.55
+        mock_platform.hist_down_hit = 0.35
+        mock_platform.data = pd.DataFrame({'Regime': [1], 'Drawdown': [-0.02], 'Vol_20d': [0.02]})
         
-        assert engine.market_beta is not None
-        assert -5.0 < engine.market_beta < 5.0  # Sanity check
-    
-    @patch('yfinance.download')
-    def test_compute_market_beta_sets_alpha(self, mock_download, sample_price_data):
-        """Test that market alpha is computed."""
-        mock_download.return_value = sample_price_data
+        mock_platform.simulate.return_value = np.random.rand(100, 126) * 100 + 100
+        mock_platform.analyze_fpt.return_value = 0.6
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        mock_platform_class.return_value = mock_platform
         
-        assert hasattr(engine, 'market_alpha')
-        assert engine.market_alpha is not None
-    
-    @patch('yfinance.download')
-    def test_regime_specific_alphas(self, mock_download, sample_price_data):
-        """Test that per-regime alphas are computed."""
-        mock_download.return_value = sample_price_data
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=100)
+        engine.run()
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        # Check synced attributes
+        assert engine.current_regime == 2
+        assert engine.regime_names == {0: "Bear", 1: "Neutral", 2: "Bull"}
+        assert engine.market_beta == 1.5
+        assert engine.last_price == 125.0
+        assert engine.target_up == 150.0
+        assert engine.target_down == 100.0
+        assert engine.n_regimes == 3
         
-        assert len(engine.regime_alpha) == engine.n_regimes
-        for r in range(engine.n_regimes):
-            assert r in engine.regime_alpha
-    
-    @patch('yfinance.download')
-    def test_idiosyncratic_vol_is_positive(self, mock_download, sample_price_data):
-        """Test that idiosyncratic volatility is positive."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        
-        assert engine.idio_vol > 0
+        # Check annualized values
+        assert engine.market_alpha == pytest.approx(0.0003 * 252, rel=0.01)
 
 
-class TestRegimeEngineV7Simulation:
-    """Test suite for Monte Carlo simulation."""
+# ==============================================================================
+# TEST: REGIME DIAGNOSTICS
+# ==============================================================================
+
+class TestRegimeEngineV7Diagnostics:
+    """Test regime diagnostics generation."""
     
-    @patch('yfinance.download')
-    def test_simulate_returns_correct_shape(self, mock_download, sample_price_data):
-        """Test that simulation returns correct path dimensions."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_regime_diagnostics_structure(self, mock_platform_class):
+        """Test that regime diagnostics have correct structure."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST", days_ahead=126, simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 2
+        mock_platform.current_regime = 0
+        mock_platform.regime_names = {0: "Low Vol", 1: "High Vol"}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0001
+        mock_platform.regime_alpha = {0: 0.0001, 1: -0.0001}
+        mock_platform.regime_mu = {0: 0.001, 1: -0.0005}
+        mock_platform.regime_sigma = {0: 0.01, 1: 0.03}
+        mock_platform.regime_duration = {0: {'mean': 40}, 1: {'mean': 20}}
+        mock_platform.transition_matrix = np.array([[0.95, 0.05], [0.1, 0.9]])
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 15.0
+        mock_platform.garch_vol = 0.18
+        mock_platform.realized_vol = 0.20
+        mock_platform.idio_vol = 0.12
+        mock_platform.hist_up_hit = 0.6
+        mock_platform.hist_down_hit = 0.25
         
-        paths = engine.simulate()
+        # Create realistic regime data
+        mock_platform.data = pd.DataFrame({
+            'Regime': [0, 0, 0, 1, 1, 0, 0, 1],
+            'Drawdown': [-0.01, -0.02, -0.015, -0.08, -0.06, -0.01, -0.02, -0.05],
+            'Vol_20d': [0.01, 0.012, 0.011, 0.035, 0.03, 0.015, 0.013, 0.028]
+        })
         
-        assert paths.shape == (100, 126)
-    
-    @patch('yfinance.download')
-    def test_simulate_paths_are_positive(self, mock_download, sample_price_data):
-        """Test that simulated prices are positive."""
-        mock_download.return_value = sample_price_data
+        mock_platform.simulate.return_value = np.random.rand(50, 126) * 100 + 80
+        mock_platform.analyze_fpt.return_value = 0.55
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        mock_platform_class.return_value = mock_platform
         
-        paths = engine.simulate()
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=50)
+        results, _ = engine.run()
         
-        assert np.all(paths > 0), "All prices should be positive"
-    
-    @patch('yfinance.download')
-    def test_simulate_paths_start_correctly(self, mock_download, sample_price_data):
-        """Test that paths start near last price."""
-        mock_download.return_value = sample_price_data
+        diagnostics = results['regime_diagnostics']
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
+        assert len(diagnostics) == 2
         
-        paths = engine.simulate()
-        
-        # First prices should be very close to last_price after one step
-        # (they evolve from last_price via returns)
-        assert paths[:, 0].min() > 0
-        assert paths[:, 0].max() < engine.last_price * 5  # Reasonable bound
-    
-    @patch('yfinance.download')
-    def test_simulate_reproducibility_with_seed(self, mock_download, sample_price_data):
-        """Test that simulation is reproducible with random seed."""
-        mock_download.return_value = sample_price_data
-        
-        engine1 = RegimeEngineV7(ticker="TEST", simulations=50)
-        engine1.ingest_data()
-        engine1.build_regime_model()
-        engine1.compute_market_beta()
-        np.random.seed(42)
-        paths1 = engine1.simulate()
-        
-        engine2 = RegimeEngineV7(ticker="TEST", simulations=50)
-        engine2.ingest_data()
-        engine2.build_regime_model()
-        engine2.compute_market_beta()
-        np.random.seed(42)
-        paths2 = engine2.simulate()
-        
-        np.testing.assert_allclose(paths1, paths2, rtol=1e-10)
+        for diag in diagnostics:
+            assert 'name' in diag
+            assert 'n_samples' in diag
+            assert 'avg_dd' in diag
+            assert 'avg_vol' in diag
+            assert 'mu' in diag
+            assert 'sigma' in diag
+            assert 'alpha' in diag
+            assert 'avg_duration' in diag
 
 
-class TestRegimeEngineV7RiskMetrics:
-    """Test suite for risk metric computation."""
+# ==============================================================================
+# TEST: VIX TOGGLE
+# ==============================================================================
+
+class TestRegimeEngineV7VixToggle:
+    """Test VIX enable/disable functionality."""
     
-    @patch('yfinance.download')
-    def test_compute_risk_metrics_returns_dict(self, mock_download, sample_price_data):
-        """Test that risk metrics returns a dictionary."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_vix_enabled_by_default(self, mock_platform_class):
+        """Test that VIX checking is enabled by default."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.5
+        mock_platform.hist_down_hit = 0.5
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
+        mock_platform.simulate.return_value = np.random.rand(50, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        risk = engine.compute_risk_metrics(paths)
+        mock_platform_class.return_value = mock_platform
         
-        assert isinstance(risk, dict)
+        engine = RegimeRiskEngineV7(ticker="TEST")
+        assert engine.enable_vix is True
+        
+        engine.run()
+        mock_platform.check_macro_context.assert_called_once()
     
-    @patch('yfinance.download')
-    def test_risk_metrics_contains_required_keys(self, mock_download, sample_price_data):
-        """Test that all required risk metrics are present."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_vix_disabled(self, mock_platform_class):
+        """Test that VIX checking can be disabled."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.5
+        mock_platform.hist_down_hit = 0.5
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
+        mock_platform.simulate.return_value = np.random.rand(50, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        risk = engine.compute_risk_metrics(paths)
+        mock_platform_class.return_value = mock_platform
         
-        required_keys = ['var_95', 'cvar_95', 'prob_dd_20', 'prob_dd_30', 
-                        'expected_max_dd', 'prob_stop', 'kelly_fraction']
-        for key in required_keys:
-            assert key in risk, f"Missing risk metric: {key}"
-    
-    @patch('yfinance.download')
-    def test_var_is_negative(self, mock_download, sample_price_data):
-        """Test that VaR is negative (represents loss)."""
-        mock_download.return_value = sample_price_data
+        engine = RegimeRiskEngineV7(ticker="TEST", enable_vix=False)
+        assert engine.enable_vix is False
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
-        
-        risk = engine.compute_risk_metrics(paths)
-        
-        # VaR should typically be negative (5th percentile of returns)
-        assert risk['var_95'] < 0.5  # Less than 50% gain at 5th percentile
-    
-    @patch('yfinance.download')
-    def test_cvar_worse_than_var(self, mock_download, sample_price_data):
-        """Test that CVaR is worse (more negative) than VaR."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST", simulations=1000)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
-        
-        risk = engine.compute_risk_metrics(paths)
-        
-        # CVaR should be worse than VaR (tail conditional)
-        assert risk['cvar_95'] <= risk['var_95']
-    
-    @patch('yfinance.download')
-    def test_kelly_fraction_bounded(self, mock_download, sample_price_data):
-        """Test that Kelly fraction is bounded [0, 1]."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
-        
-        risk = engine.compute_risk_metrics(paths)
-        
-        assert 0 <= risk['kelly_fraction'] <= 1.0
-    
-    @patch('yfinance.download')
-    def test_probabilities_bounded(self, mock_download, sample_price_data):
-        """Test that all probabilities are in [0, 1]."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
-        
-        risk = engine.compute_risk_metrics(paths)
-        
-        prob_keys = ['prob_dd_20', 'prob_dd_30', 'prob_stop', 'win_rate']
-        for key in prob_keys:
-            if key in risk:
-                assert 0 <= risk[key] <= 1.0, f"{key} out of bounds: {risk[key]}"
+        engine.run()
+        mock_platform.check_macro_context.assert_not_called()
 
 
-class TestRegimeEngineV7Validation:
-    """Test suite for validation and calibration methods."""
+# ==============================================================================
+# TEST: BACKWARD COMPATIBILITY
+# ==============================================================================
+
+class TestBackwardCompatibility:
+    """Test backward compatibility exports."""
     
-    @patch('yfinance.download')
-    def test_compute_historical_validation_sets_rates(self, mock_download, sample_price_data):
-        """Test that historical validation computes hit rates."""
-        mock_download.return_value = sample_price_data
+    def test_regime_risk_engine_alias(self):
+        """Test that RegimeRiskEngine is an alias for RegimeRiskEngineV7."""
+        from refinery.regime_engine_v7 import RegimeRiskEngine, RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        engine.ingest_data()
-        engine.compute_historical_validation()
-        
-        assert hasattr(engine, 'hist_up_hit')
-        assert hasattr(engine, 'hist_down_hit')
-        assert 0 <= engine.hist_up_hit <= 1.0
-        assert 0 <= engine.hist_down_hit <= 1.0
-    
-    @patch('yfinance.download')
-    def test_verify_simulation_invariants(self, mock_download, sample_price_data):
-        """Test simulation invariant verification."""
-        mock_download.return_value = sample_price_data
-        
-        engine = RegimeEngineV7(ticker="TEST", simulations=100)
-        engine.ingest_data()
-        engine.build_regime_model()
-        engine.compute_market_beta()
-        paths = engine.simulate()
-        
-        invariants = engine.verify_simulation_invariants(paths)
-        
-        assert isinstance(invariants, dict)
-        assert 'mean_ok' in invariants
-        assert 'std_ok' in invariants
+        assert RegimeRiskEngine is RegimeRiskEngineV7
 
 
-class TestRegimeEngineV7EdgeCases:
-    """Test edge cases and error handling."""
+# ==============================================================================
+# TEST: MACRO DICT STRUCTURE
+# ==============================================================================
+
+class TestMacroDictStructure:
+    """Test the macro conditioning dict structure in results."""
     
-    def test_invalid_ticker_type(self):
-        """Test that invalid ticker type raises error."""
-        with pytest.raises(TypeError):
-            RegimeEngineV7(ticker=123)
-    
-    def test_negative_simulations(self):
-        """Test that negative simulations raises error."""
-        with pytest.raises(ValueError):
-            RegimeEngineV7(ticker="TEST", simulations=-100)
-    
-    def test_zero_simulations(self):
-        """Test that zero simulations raises error."""
-        with pytest.raises(ValueError):
-            RegimeEngineV7(ticker="TEST", simulations=0)
-    
-    def test_invalid_n_regimes(self):
-        """Test that invalid n_regimes raises error."""
-        with pytest.raises(ValueError):
-            RegimeEngineV7(ticker="TEST", n_regimes=1)  # Need at least 2
-    
-    @patch('yfinance.download')
-    def test_handles_download_failure(self, mock_download):
-        """Test handling of yfinance download failure."""
-        mock_download.side_effect = Exception("Network error")
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_macro_dict_keys(self, mock_platform_class):
+        """Test macro dict has all expected keys."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST")
-        with pytest.raises(Exception):
-            engine.ingest_data()
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.25
+        mock_platform.market_alpha = 0.0002
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 19.5
+        mock_platform.garch_vol = 0.24
+        mock_platform.realized_vol = 0.26
+        mock_platform.idio_vol = 0.14
+        mock_platform.hist_up_hit = 0.55
+        mock_platform.hist_down_hit = 0.30
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
+        mock_platform.simulate.return_value = np.random.rand(50, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.55
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
+        
+        mock_platform_class.return_value = mock_platform
+        
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=50)
+        results, _ = engine.run()
+        
+        macro = results['macro']
+        
+        assert 'beta' in macro
+        assert 'alpha_ann' in macro
+        assert 'idio_vol' in macro
+        assert 'vix' in macro
+        assert 'garch_vol' in macro
+        assert 'realized_vol' in macro
+        
+        assert macro['beta'] == 1.25
+        assert macro['vix'] == 19.5
+        assert macro['garch_vol'] == 0.24
+        assert macro['realized_vol'] == 0.26
+        assert macro['idio_vol'] == 0.14
 
 
-@pytest.mark.integration
-class TestRegimeEngineV7Integration:
-    """Integration tests for full workflow."""
+# ==============================================================================
+# TEST: SANITY DICT STRUCTURE
+# ==============================================================================
+
+class TestSanityDictStructure:
+    """Test the sanity check dict structure in results."""
     
-    @patch('yfinance.download')
-    @patch('matplotlib.pyplot.show')
-    def test_full_run_workflow(self, mock_show, mock_download, sample_price_data):
-        """Test complete run() workflow."""
-        mock_download.return_value = sample_price_data
+    @patch('refinery.regime_engine_v7.RegimeRiskPlatform')
+    def test_sanity_dict_keys(self, mock_platform_class):
+        """Test sanity dict has historical hit rates."""
+        from refinery.regime_engine_v7 import RegimeRiskEngineV7
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=50)
-        result = engine.run(run_full_calibration=False)
+        mock_platform = MagicMock()
+        mock_platform.n_regimes = 3
+        mock_platform.current_regime = 1
+        mock_platform.regime_names = {}
+        mock_platform.market_beta = 1.0
+        mock_platform.market_alpha = 0.0
+        mock_platform.regime_alpha = {}
+        mock_platform.regime_mu = {}
+        mock_platform.regime_sigma = {}
+        mock_platform.regime_duration = {}
+        mock_platform.transition_matrix = np.eye(3)
+        mock_platform.last_price = 100.0
+        mock_platform.target_up = 120.0
+        mock_platform.target_down = 80.0
+        mock_platform.vix_level = 18.0
+        mock_platform.garch_vol = 0.22
+        mock_platform.realized_vol = 0.25
+        mock_platform.idio_vol = 0.15
+        mock_platform.hist_up_hit = 0.62
+        mock_platform.hist_down_hit = 0.28
+        mock_platform.data = pd.DataFrame({'Regime': [], 'Drawdown': [], 'Vol_20d': []})
+        mock_platform.simulate.return_value = np.random.rand(50, 126) * 100
+        mock_platform.analyze_fpt.return_value = 0.5
+        mock_platform.compute_risk_metrics.return_value = {}
+        mock_platform.generate_signal.return_value = {}
         
-        assert 'paths' in result
-        assert 'prob_up' in result
-        assert 'prob_down' in result
-        assert 'risk' in result
-        assert 'signal' in result
-    
-    @patch('yfinance.download')
-    @patch('matplotlib.pyplot.show')
-    def test_run_with_calibration(self, mock_show, mock_download, sample_price_data):
-        """Test run with full calibration suite."""
-        mock_download.return_value = sample_price_data
+        mock_platform_class.return_value = mock_platform
         
-        engine = RegimeEngineV7(ticker="TEST", simulations=50)
-        result = engine.run(run_full_calibration=True)
+        engine = RegimeRiskEngineV7(ticker="TEST", simulations=50)
+        results, _ = engine.run()
         
-        # Should complete without errors
-        assert result is not None
+        sanity = results['sanity']
+        
+        assert 'hist_up_hit' in sanity
+        assert 'hist_down_hit' in sanity
+        assert sanity['hist_up_hit'] == 0.62
+        assert sanity['hist_down_hit'] == 0.28

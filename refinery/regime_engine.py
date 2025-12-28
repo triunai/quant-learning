@@ -237,7 +237,7 @@ class RegimeRiskEngine:
                 self.stationary_dist[s] * self.state_means[s]
                 for s in range(self.n_states)
             )
-        except:
+        except Exception:
             self.stationary_dist = np.ones(self.n_states) / self.n_states
             self.implied_daily_drift = self.mu / 252
 
@@ -286,7 +286,7 @@ class RegimeRiskEngine:
             if isinstance(vix.columns, pd.MultiIndex):
                 vix.columns = vix.columns.get_level_values(0)
             self.vix_level = float(vix['Close'].iloc[-1])
-        except:
+        except Exception:
             self.vix_level = 20
             print("    WARNING: VIX fetch failed")
             return
@@ -321,8 +321,8 @@ class RegimeRiskEngine:
         # ==============================================================
         # P1-1 FIX: Convex blend with identity (always valid probs)
         # ==============================================================
-        I = np.eye(self.n_states)
-        self.markov_matrix = (1 - alpha) * self.markov_matrix + alpha * I
+        identity_matrix = np.eye(self.n_states)
+        self.markov_matrix = (1 - alpha) * self.markov_matrix + alpha * identity_matrix
         # Already normalized by construction
 
         print(f"    Stickiness blend α={alpha:.2f}")

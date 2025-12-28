@@ -137,7 +137,7 @@ class TriadRiskEngine:
         try:
             vix_data = yf.download("^VIX", period="5d", progress=False)
             self.vix_level = vix_data['Close'].iloc[-1].item()
-        except:
+        except Exception:
             self.vix_level = 20  # Default neutral
             print("    WARNING: Could not fetch VIX, using default")
             return

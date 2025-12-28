@@ -398,8 +398,9 @@ class RegimeRiskPlatform:
             if isinstance(vix.columns, pd.MultiIndex):
                 vix.columns = vix.columns.get_level_values(0)
             self.vix_level = float(vix['Close'].iloc[-1])
-        except:
+        except (KeyError, IndexError, ValueError) as e:
             self.vix_level = 20
+            print(f"    VIX fetch failed ({type(e).__name__}), using default 20")
 
         # Adjust jump probability based on VIX
         if self.vix_level > 30:
@@ -440,8 +441,9 @@ class RegimeRiskPlatform:
             forecast = result.forecast(horizon=1)
             self.garch_vol = float(np.sqrt(forecast.variance.iloc[-1, 0]) / 100 * np.sqrt(252))
             print(f"    GARCH: {self.garch_vol:.1%} | Realized: {self.realized_vol:.1%}")
-        except:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
             self.garch_vol = self.realized_vol
+            print(f"    GARCH failed ({type(e).__name__}), using realized vol: {self.realized_vol:.1%}")
 
     # =========================================================================
     # SIMULATION: JUMP DIFFUSION + SEMI-MARKOV + MACRO
@@ -464,15 +466,21 @@ class RegimeRiskPlatform:
         current_regimes = np.full(self.simulations, self.current_regime)
         remaining_duration = np.zeros(self.simulations)
 
-        # FIX: Sample initial durations using FORWARD RECURRENCE (residual life)
-        # When already in a regime, remaining time is NOT the full run length.
-        # Residual life is approximately uniform over [1, sampled_duration]
+        # FIX: Sample initial durations using PROPER RESIDUAL LIFE DISTRIBUTION
+        # When already in a regime, remaining time must use length-biased sampling.
+        # Longer durations are more likely to be "observed in progress".
         for s in range(self.simulations):
             r = current_regimes[s]
             samples = self.regime_duration[r]['samples']
-            full_duration = np.random.choice(samples)
-            # Forward recurrence: uniform over [1, full_duration]
-            remaining_duration[s] = np.random.randint(1, max(2, full_duration + 1))
+            samples_array = np.array(samples)
+            if len(samples_array) > 0 and samples_array.sum() > 0:
+                # Length-biased sampling: P(sample) ~ duration (longer runs more likely to be observed)
+                weights = samples_array / samples_array.sum()
+                full_duration = np.random.choice(samples_array, p=weights)
+                # Residual life: uniform over [1, full_duration]
+                remaining_duration[s] = np.random.randint(1, max(2, full_duration + 1))
+            else:
+                remaining_duration[s] = 5
 
         # Market returns: sample from HISTORICAL distribution (not Normal!)
         hist_market_ret = self.market_data['Log_Ret'].values
@@ -502,10 +510,17 @@ class RegimeRiskPlatform:
                 # Full factor model
                 returns[s] = alpha + self.market_beta * market_ret + epsilon
 
-            # Jump component (rare events)
-            jump_mask = np.random.rand(self.simulations) < self.jump_prob
-            jump_returns = np.random.normal(self.jump_mu, self.jump_sigma, self.simulations)
-            returns = np.where(jump_mask, returns + jump_returns, returns)
+            # NOTE: Jump diffusion DISABLED to avoid double-counting
+            # Empirical residual sampling already preserves fat tails from historical data.
+            # Adding jump returns would double-count extreme events already in the residual pool.
+            # If you want jump diffusion, you must first separate "normal" vs "jump" residuals:
+            #   normal_residuals = residual_pool[abs(residual_pool) < threshold]
+            #   jump_residuals = residual_pool[abs(residual_pool) >= threshold]
+            # Then sample from normal_residuals and add jumps only from jump_residuals.
+            # For now, empirical tails are sufficient for tail risk modeling.
+            # jump_mask = np.random.rand(self.simulations) < self.jump_prob
+            # jump_returns = np.random.normal(self.jump_mu, self.jump_sigma, self.simulations)
+            # returns = np.where(jump_mask, returns + jump_returns, returns)
 
             # Evolve prices
             price_paths[:, d + 1] = prev_price * np.exp(returns)
@@ -620,9 +635,11 @@ class RegimeRiskPlatform:
         sigma = np.std(simple_returns)
         raw_kelly = mu / (sigma ** 2) if sigma > 0 else 0
 
-        # Apply fractional Kelly (0.5x) and DD-aware penalty
-        dd_penalty = max(0, 1 - 2 * prob_dd_30)  # Scale down if DD risk > 50%
-        kelly = max(0, min(0.5, raw_kelly * 0.5 * dd_penalty))
+        # Apply fractional Kelly (0.5x) with EXPONENTIAL DD penalty (smoother than linear)
+        # Linear penalty was too harsh: at prob_dd_30=0.4, penalty=0.2 crushed Kelly to near-zero
+        # Exponential decay: from 1 at prob_dd_30=0 to ~0.3 at prob_dd_30=0.4
+        dd_penalty = np.exp(-3 * prob_dd_30)
+        kelly = max(0, min(0.25, raw_kelly * 0.5 * dd_penalty))  # 0.25 max position (was 0.5)
 
         return {
             'var_95': var_95,
@@ -779,7 +796,7 @@ class RegimeRiskPlatform:
         # FIX: Define multiplier ONCE outside loop (as percentage move)
         # e.g., target_up=280, last_price=189 -> up_mult=1.48 means "hit +48%"
         up_mult = self.target_up / self.last_price
-        self.target_down / self.last_price
+        down_mult = self.target_down / self.last_price  # FIXED: Was missing assignment!
 
         predictions = []
         actuals = []
@@ -1014,14 +1031,19 @@ class RegimeRiskPlatform:
         ax3.axvline(np.median(final), color='yellow', ls='--')
         ax3.set_title("Final Price Distribution")
 
-        # 4. EXIT Transition matrix (what simulator actually uses)
+        # 4. EXIT Transition matrix (matches simulator logic in simulate() lines 522-530)
         ax4 = fig.add_subplot(gs[1, 2])
         labels = [self.regime_names.get(i, f"R{i}")[:6] for i in range(self.n_regimes)]
-        # FIX: Plot EXIT matrix (diagonal=0, renormalized) to match simulator
+        # FIX: Build exit matrix EXACTLY matching simulator logic to avoid mismatch
         exit_matrix = self.transition_matrix.copy()
-        np.fill_diagonal(exit_matrix, 0)
-        row_sums = exit_matrix.sum(axis=1, keepdims=True)
-        exit_matrix = np.where(row_sums > 0, exit_matrix / row_sums, exit_matrix)
+        for r in range(self.n_regimes):
+            probs = exit_matrix[r].copy()
+            probs[r] = 0  # Zero out self-transition (duration handles persistence)
+            if probs.sum() > 0:
+                exit_matrix[r] = probs / probs.sum()
+            else:
+                # Fallback: uniform distribution if no exit transitions recorded
+                exit_matrix[r] = np.ones(self.n_regimes) / self.n_regimes
         sns.heatmap(exit_matrix, annot=True, fmt='.2f', cmap='magma',
                     xticklabels=labels, yticklabels=labels, ax=ax4)
         ax4.set_title("Exit Transitions (sim)")
