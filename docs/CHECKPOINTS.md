@@ -137,3 +137,19 @@ fix: Test suite overhaul + lint compliance
 - **Quant Platform Calibration** — Implemented walk-forward backtesting
 - **Multi-threshold Validation** — Added historical hit-rate analysis
 - **Bucket Asymmetry Diagnostics** — Added regime skewness checks
+
+## Checkpoint: 2025-12-28 (Session 2)
+
+### 🧠 Semi-Markov Regime Model Implemented
+Addressed the "Memoryless Paradox" by implementing a Semi-Markov model that tracks regime duration explicitly.
+
+**Key Features:**
+- **Explicit Duration Modeling:** Regimes now have "memory".
+- **Gamma Distribution Fitting:** High-volatility regimes are modeled with Gamma distributions to capture clustering and aging.
+- **Conditional Transitions:** Transitions are modeled separately from duration.
+- **Monte Carlo Engine:** New simulation engine (`refinery/semi_markov.py`) that samples duration-dependent paths.
+
+**Files Created:**
+- `refinery/semi_markov.py`
+- `tests/test_semi_markov.py`
+- `docs/SEMI_MARKOV_KNOWLEDGE_BASE.md`
