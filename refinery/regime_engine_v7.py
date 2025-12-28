@@ -7,6 +7,7 @@ for clean Streamlit integration without modifying the source.
 
 import sys
 import os
+import importlib.util
 
 # Add battle-tested to path for import
 BATTLE_TESTED_PATH = os.path.join(os.path.dirname(__file__), '..', 'battle-tested')
@@ -15,7 +16,6 @@ if BATTLE_TESTED_PATH not in sys.path:
 
 # Import the production v7.0 platform
 # Note: This file is named with a hyphen, so we use importlib
-import importlib.util
 spec = importlib.util.spec_from_file_location(
     "pltr_test_2",
     os.path.join(BATTLE_TESTED_PATH, "PLTR-test-2.py")
