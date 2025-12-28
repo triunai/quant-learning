@@ -76,7 +76,22 @@ class RegimeRiskPlatform:
                  stop_loss_pct=0.15,
                  n_regimes=3):
 
-        self.ticker = ticker
+        """
+                 Initialize the RegimeRiskPlatform instance and set modeling, simulation, and risk-analysis defaults.
+                 
+                 Parameters:
+                     ticker (str): Asset ticker to model.
+                     market_ticker (str): Market/index ticker used for beta and market conditioning (default "QQQ").
+                     days_ahead (int): Simulation horizon in trading days for scenario generation (default 126).
+                     simulations (int): Number of Monte Carlo simulated price paths to generate (default 5000).
+                     target_up (float | None): Optional upward price target as a fractional gain (e.g., 0.10 for +10%); if None, target determination is deferred.
+                     target_down (float | None): Optional downward price target as a fractional loss (e.g., 0.10 for -10%); if None, target determination is deferred.
+                     stop_loss_pct (float): Fractional stop-loss threshold (e.g., 0.15 for 15% stop) used in risk metrics (default 0.15).
+                     n_regimes (int): Number of regimes to infer with the regime model (default 3).
+                 
+                 The constructor also initializes internal containers and default parameters for regime statistics, jump-diffusion, macro conditioning, transition dynamics, GARCH fallbacks, historical benchmarks, and anomaly/VIX state.
+                 """
+                 self.ticker = ticker
         self.market_ticker = market_ticker
         self.days_ahead = days_ahead
         self.simulations = simulations
@@ -132,6 +147,11 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def ingest_data(self):
+        """
+        Load historical price data for the asset and market, compute log returns and slow features used for regime detection, align both time series, and set derived state (last price/date, realized volatility, and default up/down targets).
+        
+        This method fetches five years of adjusted price data for the configured ticker and market ticker, computes log returns, rolling return and volatility features (5/20/60-day aggregates), a 60-day drawdown series, and a 20-day volume z-score; it removes missing values, intersects the asset and market indices, records the most recent close and date, computes annualized realized volatility from log returns, and populates default target_up/target_down values when they are not provided.
+        """
         print(f"[DATA] Loading {self.ticker} + {self.market_ticker}...")
 
         # Asset data
@@ -187,7 +207,11 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def build_regime_model(self):
-        """Build regimes from SLOW FEATURES, not return buckets."""
+        """
+        Derive market regimes from slow-moving features and populate regime state on the instance.
+        
+        Fits a Gaussian Mixture Model on slow features ['Vol_20d', 'Vol_60d', 'Ret_20d', 'Drawdown'] (or falls back to a simple volatility bucketing if sklearn is unavailable), assigns regime labels and regime probabilities to historical rows, determines the current regime with its probability, and names regimes by their 20-day volatility characteristic. As side effects, this method sets self.gmm, self.data['Regime'], self.regime_probs, self.current_regime, and self.regime_names, prints regime diagnostics, and then computes per-regime statistics, semi-Markov durations, and the regime transition matrix via internal helpers.
+        """
         print("[REGIMES] GMM clustering on slow features...")
 
         if not SKLEARN_OK:
@@ -264,7 +288,15 @@ class RegimeRiskPlatform:
         self._compute_transition_matrix()
 
     def _compute_regime_stats(self):
-        """Compute per-regime return distributions."""
+        """
+        Compute and store per-regime mean and standard deviation of log returns.
+        
+        For each regime index, sets self.regime_mu[r] to the regime's sample mean of Log_Ret
+        and self.regime_sigma[r] to the sample standard deviation when the regime has
+        more than 10 observations. If a regime has 10 or fewer observations, sets the
+        mean to 0.0 and the sigma to self.realized_vol / sqrt(252) as a fallback.
+        This method also prints a brief, annualized summary of each regime's mu and sigma.
+        """
         for r in range(self.n_regimes):
             mask = self.data['Regime'] == r
             returns = self.data.loc[mask, 'Log_Ret'].values
@@ -282,7 +314,16 @@ class RegimeRiskPlatform:
         print()
 
     def _compute_regime_durations(self):
-        """Semi-Markov: empirical distribution of regime run lengths."""
+        """
+        Compute and store empirical run-length statistics for each regime based on historical regime labels.
+        
+        Populates self.regime_duration with a dict for each regime containing:
+        - 'mean': average consecutive-day run length,
+        - 'std': standard deviation of run lengths,
+        - 'samples': list of observed run-lengths.
+        
+        If a regime has no observed runs, a default entry of {'mean': 5, 'std': 2, 'samples': [5]} is used. The method also prints a one-line summary of average duration and dispersion for each regime.
+        """
         print("    Semi-Markov duration modeling...")
 
         regimes = self.data['Regime'].values
@@ -317,7 +358,11 @@ class RegimeRiskPlatform:
             print(f"      {name}: avg duration {d['mean']:.1f} days (+/-{d['std']:.1f})")
 
     def _compute_transition_matrix(self):
-        """Transition matrix between regimes."""
+        """
+        Builds and stores a smoothed row-stochastic transition matrix of regime-to-regime daily transitions.
+        
+        Counts transitions between consecutive days' Regime labels in self.data, adds additive smoothing of 0.01 to every cell, normalizes each row to sum to 1, and assigns the result to self.transition_matrix as an (n_regimes x n_regimes) NumPy array.
+        """
         regimes = self.data['Regime'].values
         matrix = np.zeros((self.n_regimes, self.n_regimes))
 
@@ -337,9 +382,14 @@ class RegimeRiskPlatform:
 
     def compute_market_beta(self):
         """
-        Compute beta AND ALPHA vs market.
-        CRITICAL: r = alpha + beta*r_market + epsilon
-        Missing alpha collapses upside probability.
+        Estimate the asset's market exposure and intercept relative to the configured market series.
+        
+        Calculates parameters for the linear model r = alpha + beta * r_market + epsilon and stores:
+        - market_beta: estimated beta (market sensitivity).
+        - market_alpha: estimated intercept (alpha).
+        - idio_vol: annualized standard deviation of residuals.
+        - regime_alpha: per-regime intercepts (dict mapping regime -> alpha).
+        - regime_residuals: per-regime residual pools (dict mapping regime -> residual array).
         """
         print(f"[MACRO] Computing alpha + beta vs {self.market_ticker}...")
 
@@ -390,7 +440,14 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def check_macro_context(self):
-        """VIX level and anomaly detection."""
+        """
+        Update VIX level, adjust daily jump probability, and detect an anomaly in the latest observation.
+        
+        Sets the following attributes on self:
+        - vix_level: latest VIX close price (defaults to 20 if the VIX fetch fails).
+        - jump_prob: daily jump probability chosen by VIX thresholds (>30 → 0.05, >25 → 0.03, otherwise 0.02).
+        - is_anomaly: when scikit-learn is available, True if the most recent (Log_Ret, Vol_20d, Drawdown) observation is flagged as an anomaly by an IsolationForest, False otherwise.
+        """
         print("[CONTEXT] VIX + Anomaly...")
 
         try:
@@ -426,7 +483,11 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def run_garch(self):
-        """GARCH volatility forecast."""
+        """
+        Compute and store an annualized one-step GARCH(1,1) volatility forecast.
+        
+        Sets self.garch_vol to the forecasted annualized volatility (e.g., 0.20 for 20%). If the ARCH library is unavailable or model fitting/forecasting fails, sets self.garch_vol to self.realized_vol.
+        """
         if not ARCH_OK:
             self.garch_vol = self.realized_vol
             return
@@ -449,11 +510,12 @@ class RegimeRiskPlatform:
 
     def simulate(self):
         """
-        FIXED SIMULATION:
-        - Uses ALPHA + beta factor model: r = alpha_regime + beta*r_market + epsilon
-        - Samples residuals EMPIRICALLY (fat tails preserved)
-        - Semi-Markov handles persistence (no double-counting with sticky matrix)
-        - Market returns from historical distribution
+        Simulate future price paths using a regime-conditioned factor model with semi-Markov persistence.
+        
+        Simulations use a per-regime alpha plus beta times a market return plus an empirically sampled residual; market returns are drawn from historical market log-returns, regime persistence is handled via semi-Markov durations (forward-recurrence for initial remaining time), and occasional jump shocks are applied according to the configured jump parameters.
+        
+        Returns:
+            np.ndarray: Simulated price paths of shape (n_paths, days_ahead) containing future prices for each simulation (initial price at t=0 is excluded).
         """
         print(f"[SIM] {self.simulations:,} paths x {self.days_ahead} days...")
 
@@ -538,8 +600,19 @@ class RegimeRiskPlatform:
 
     def verify_simulation_invariants(self, paths):
         """
-        CRITICAL DIAGNOSTIC: Sim daily stats MUST match historical.
-        If these don't match, the simulator is broken before anything else matters.
+        Check that simulated daily return statistics match historical daily return statistics and report results.
+        
+        Compares mean, standard deviation, skewness, and kurtosis between simulated returns (from `paths`) and historical returns stored in the instance, prints a diagnostic table and a warning if any check fails, and returns a dictionary of boolean results.
+        
+        Parameters:
+            paths (ndarray): Simulated price paths with shape (n_simulations, n_days + 1); daily log returns are computed from adjacent price ratios.
+        
+        Returns:
+            dict: Boolean flags with keys 'mean_ok', 'std_ok', 'skew_ok', 'kurt_ok' indicating whether each statistic falls within the internal tolerance:
+                - mean_ok: abs(sim_mean - hist_mean) < 0.001
+                - std_ok: relative difference abs(sim_std - hist_std) / hist_std < 0.3
+                - skew_ok: abs(sim_skew - hist_skew) < 1.0
+                - kurt_ok: abs(sim_kurt - hist_kurt) < 3.0
         """
         print("\n[INVARIANT CHECK] Sim vs Historical daily stats:")
 
@@ -584,7 +657,24 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def compute_risk_metrics(self, paths):
-        """Full risk dashboard: VaR, CVaR, drawdown, stop-loss, position sizing."""
+        """
+        Compute a concise risk dashboard from simulated price paths.
+        
+        Parameters:
+            paths (np.ndarray): Simulated price trajectories with shape (simulations, horizon+1), where column 0 is the starting price (self.last_price) and subsequent columns are future prices.
+        
+        Returns:
+            metrics (dict): Dictionary containing:
+                var_95 (float): 5th percentile of simple returns across simulations.
+                cvar_95 (float): Mean of simple returns that are <= `var_95`.
+                prob_dd_20 (float): Fraction of simulations with maximum drawdown <= -20%.
+                prob_dd_30 (float): Fraction of simulations with maximum drawdown <= -30%.
+                expected_max_dd (float): Average maximum drawdown across simulations.
+                prob_stop (float): Fraction of simulations that breached the configured stop price.
+                kelly_fraction (float): Fractional Kelly sizing (capped between 0 and 0.5) after a drawdown-aware penalty.
+                win_rate (float): Fraction of simulations with positive simple return at horizon.
+                max_drawdowns (np.ndarray): Array of per-simulation maximum drawdowns (negative values).
+        """
         final = paths[:, -1]
 
         # FIX: Use SIMPLE returns for interpretable VaR/CVaR (not log returns)
@@ -641,7 +731,18 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def compute_historical_validation(self):
-        """Historical first-passage hit rates for targets."""
+        """
+        Compute historical first-passage hit rates for the configured up and down targets and store them on the instance.
+        
+        Scans historical closing prices with a sliding window of length `self.days_ahead`. For each window starting at time t, it checks whether the price path within the next `days_ahead` days reaches or exceeds the up target multiplier (target_up relative to the most recent price) or falls to or below the down target multiplier.
+        
+        Sets:
+            self.hist_up_hit (float): Fraction of windows where the up target was hit.
+            self.hist_down_hit (float): Fraction of windows where the down target was hit.
+        
+        Notes:
+            Uses `self.data['Close']`, `self.days_ahead`, `self.target_up`, `self.target_down`, and `self.last_price` to compute the results.
+        """
         closes = self.data['Close'].values
         n = len(closes)
         horizon = self.days_ahead
@@ -673,8 +774,19 @@ class RegimeRiskPlatform:
 
     def multi_threshold_calibration(self):
         """
-        RIGOROUS CALIBRATION: Multiple thresholds + horizons.
-        This is what makes it actually trustworthy.
+        Calibrates historical probabilities of reaching multiple percentage thresholds over several fixed horizons.
+        
+        Computes, for each combination of horizon and threshold, the fraction of historical rolling windows in which the asset's price
+        reached an upside threshold (start_price * (1 + threshold)) or a downside threshold (start_price * (1 - threshold))
+        within the horizon. Also prints a human-readable table of the calibration results.
+        
+        Returns:
+            results (list[dict]): A list of dictionaries, each containing:
+                - 'horizon' (int): horizon in trading days used for the window.
+                - 'threshold' (float): target percentage (e.g., 0.10 for 10%).
+                - 'up_hit' (float): fraction of windows that hit the upside threshold (0.0–1.0).
+                - 'down_hit' (float): fraction of windows that hit the downside threshold (0.0–1.0).
+                - 'n_windows' (int): number of rolling windows evaluated for that combination.
         """
         print("\n[MULTI-THRESHOLD CALIBRATION]")
 
@@ -722,8 +834,16 @@ class RegimeRiskPlatform:
 
     def bucket_asymmetry_diagnostics(self):
         """
-        Verify asymmetry between Crash/Down vs Up/Rip buckets.
-        Key insight: if downside is overshooting, check if Crash tails are fatter.
+        Report per-regime return distribution and persistence statistics to diagnose downside/upside asymmetry.
+        
+        Prints, for each fitted regime with at least 10 observations, the regime name and these metrics:
+        - annualized mean return (percent),
+        - annualized volatility (percent),
+        - sample skewness,
+        - 5th and 95th percentile returns (percent),
+        - average contiguous run length in days (persistence).
+        
+        If the Gaussian mixture model has not been fitted or a regime has fewer than 10 observations, that regime is skipped. No value is returned; output is emitted to standard output.
         """
         print("\n[BUCKET ASYMMETRY DIAGNOSTICS]")
 
@@ -765,10 +885,19 @@ class RegimeRiskPlatform:
 
     def walk_forward_validation(self, n_folds=5):
         """
-        TRUE VALIDATION: Walk-forward (no future leakage).
-        For each fold, train on past, predict on future, measure calibration.
-
-        FIX: Define multiplier ONCE as percentage move, apply consistently.
+        Perform walk-forward (chronological) validation of the historical probability of hitting the configured up target.
+        
+        Parameters:
+            n_folds (int): Number of sequential training/testing folds to run (default 5). Each fold trains on all data prior to the test window and tests on the next horizon window.
+        
+        Returns:
+            dict or None: If validation folds were produced, returns a dictionary with:
+                - brier (float): Mean squared Brier score between predicted probabilities and actual binary outcomes.
+                - cal_error (float): Absolute difference between mean predicted probability and mean actual hit rate.
+                - predictions (ndarray): Predicted probability for each fold.
+                - actuals (ndarray): Binary actual outcomes (1 if target hit in test window, 0 otherwise) for each fold.
+                - fold_details (list): Per-fold dictionaries containing 'fold' (int), 'pred' (float), and 'actual' (int).
+            Returns None if no valid folds could be evaluated.
         """
         print(f"\n[WALK-FORWARD VALIDATION] ({n_folds} folds)")
 
@@ -840,6 +969,17 @@ class RegimeRiskPlatform:
         return None
 
     def analyze_fpt(self, paths, target, direction="up"):
+        """
+        Compute the fraction of simulated price paths that hit a specified price target within the simulation horizon.
+        
+        Parameters:
+            paths (ndarray): 2D array of simulated prices with shape (n_paths, n_steps), where each row is one path.
+            target (float): Price threshold to test for first-passage.
+            direction (str, optional): "up" to test for any price greater than or equal to `target`, "down" to test for any price less than or equal to `target`. Defaults to "up".
+        
+        Returns:
+            float: Proportion of paths that reach the target at least once during the simulated period (value between 0 and 1).
+        """
         if direction == "down":
             hits = np.any(paths <= target, axis=1)
         else:
@@ -851,6 +991,25 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def generate_signal(self, prob_up, prob_down, risk):
+        """
+        Generate a trading signal and a calibrated confidence score from simulated outcome probabilities and risk metrics.
+        
+        Parameters:
+            prob_up (float): Simulated probability of reaching the upside target.
+            prob_down (float): Simulated probability of reaching the downside target.
+            risk (dict): Risk metrics produced by the simulation (expects keys such as 'prob_dd_30') used to adjust confidence.
+        
+        Returns:
+            dict: {
+                'signal': str,        # one of 'LONG', 'SHORT', 'NEUTRAL', or 'CASH' (immediate cash-out on anomaly)
+                'confidence': int,    # confidence percentage clamped between 30 and 85
+                'reasoning': list     # human-readable reasons that influenced the signal/confidence
+            }
+        
+        Behavior notes:
+        - If the platform has flagged an anomaly, returns 'CASH' with high confidence immediately.
+        - Signals are driven by the edge (prob_up - prob_down), then adjusted downwards by drawdown risk, elevated VIX, and historical calibration comparisons.
+        """
         signal = 'NEUTRAL'
         confidence = 50
         reasons = []
@@ -894,6 +1053,22 @@ class RegimeRiskPlatform:
     # =========================================================================
 
     def run(self, run_full_calibration=True):
+        """
+        Run the full regime-risk workflow to produce simulated price scenarios, risk metrics, and a trading signal.
+        
+        This method executes the end-to-end pipeline: build regimes, compute market conditioning (beta/alpha), check macro context, fit volatility (GARCH), perform historical validation, optionally run the full calibration suite, simulate forward price paths using the regime-conditioned stochastic engine, verify simulation invariants against historical statistics, compute first-passage probabilities for targets, derive risk dashboard metrics, and generate a final trading signal. It also prints a textual summary and produces diagnostic plots.
+        
+        Parameters:
+            run_full_calibration (bool): If True, execute the additional calibration and validation steps (bucket asymmetry diagnostics, multi-threshold calibration, and walk‑forward validation). Defaults to True.
+        
+        Returns:
+            result (dict): A dictionary containing:
+                - paths: ndarray of simulated price paths (simulations x horizon).
+                - prob_up: float probability of reaching the up target within the horizon.
+                - prob_down: float probability of reaching the down target within the horizon.
+                - risk: dict of computed risk metrics (VaR, CVaR, drawdown probabilities, stop-loss breach probability, Kelly fraction, etc.).
+                - signal: dict describing the recommended action, confidence, and reasoning.
+        """
         print("\n" + "="*70)
         print(f"REGIME RISK PLATFORM v7.0 - {self.ticker}")
         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -930,6 +1105,17 @@ class RegimeRiskPlatform:
                 'risk': risk, 'signal': signal}
 
     def _print_summary(self, paths, prob_up, prob_down, risk, signal):
+        """
+        Print a concise textual summary of current state, targets, simulated outcome distribution, risk metrics, and the generated trading signal.
+        
+        Parameters:
+        	paths (ndarray): Simulated price paths with shape (n_simulations, days+1); the summary uses the last column (final prices).
+        	prob_up (float): Estimated probability that the price will reach the upward target within the horizon.
+        	prob_down (float): Estimated probability that the price will reach the downward target within the horizon.
+        	risk (dict): Risk dashboard values including at minimum the keys 'var_95', 'cvar_95', 'prob_dd_20', 'prob_dd_30', 'prob_stop', and 'kelly_fraction'.
+        	signal (dict): Signal information with keys 'signal' (str), 'confidence' (numeric percent), and 'reasoning' (iterable of strings) that explain the decision.
+        
+        """
         final = paths[:, -1]
 
         print(f"\n{'='*70}")
@@ -968,6 +1154,28 @@ class RegimeRiskPlatform:
         print("="*70)
 
     def _plot(self, paths, prob_up, prob_down, risk, signal):
+        """
+        Render a multi-panel diagnostic figure summarizing simulated scenario outputs, risk metrics, calibration, and the generated trading signal.
+        
+        Parameters:
+            paths (ndarray): Simulated price paths with shape (n_simulations, days_ahead).
+            prob_up (float): Estimated probability that the up target is hit (0-1).
+            prob_down (float): Estimated probability that the down target is hit (0-1).
+            risk (dict): Risk dashboard outputs produced by compute_risk_metrics (keys used: 'max_drawdowns',
+                'var_95', 'cvar_95', 'prob_dd_20', 'prob_dd_30', 'prob_stop', 'kelly_fraction').
+            signal (dict): Signal dictionary produced by generate_signal (keys used: 'signal', 'confidence').
+        
+        The figure includes:
+        - A price cone (median and percentile bands) with target and current price lines and regime/beta in the title.
+        - A histogram of path-level maximum drawdowns with -20% and -30% reference lines.
+        - A histogram of final simulated prices with median and last-price markers.
+        - An exit transition heatmap (off-diagonal exit probabilities used by the simulator).
+        - A horizontal bar risk dashboard showing VaR/CVaR and event probabilities.
+        - A calibration comparison bar chart (simulated vs historical hit rates for up/down targets).
+        - A signal summary box displaying the chosen signal and confidence.
+        
+        No value is returned; the function displays the plot.
+        """
         fig = plt.figure(figsize=(20, 14))
         gs = fig.add_gridspec(3, 3, height_ratios=[1.2, 1, 0.8])
 

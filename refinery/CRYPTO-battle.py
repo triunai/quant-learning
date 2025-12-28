@@ -30,6 +30,27 @@ class CryptoBattleModel:
     """
 
     def __init__(self, ticker="BTC-USD", days_ahead=126, simulations=5000, target_price=None):
+        """
+        Initialize the CryptoBattleModel with forecasting and simulation settings for a crypto ticker.
+        
+        Parameters:
+            ticker (str): Asset ticker symbol (e.g., "BTC-USD").
+            days_ahead (int): Forecast horizon in calendar days.
+            simulations (int): Number of simulated price paths to generate.
+            target_price (float | None): Price goal used for first-passage analysis; if None, it will be set automatically later.
+        
+        Attributes:
+            data (pandas.DataFrame | None): Historical price data once ingested.
+            markov_matrix (ndarray | None): 6x6 transition matrix for regime transitions once built.
+            mu (float): Annualized drift (initialized to 0).
+            sigma (float): Annualized volatility (initialized to 0).
+            last_price (float): Most recent observed price (initialized to 0).
+            last_date (datetime | None): Date of the most recent observation.
+            current_state (int): Index of the current Markov regime.
+            n_states (int): Number of discrete regimes (6).
+            state_map (dict): Mapping of regime index to regime name:
+                0: "Capitulation", 1: "Bear", 2: "Accumulation", 3: "Bull", 4: "Rally", 5: "Mania".
+        """
         self.ticker = ticker
         self.days_ahead = days_ahead
         self.simulations = simulations
@@ -55,6 +76,11 @@ class CryptoBattleModel:
         }
 
     def ingest_data(self):
+        """
+        Download historical price data for the model's ticker and compute annualized log-return statistics.
+        
+        Fetches full available history from Yahoo Finance, computes daily log returns, drops missing values, and populates instance attributes used by the model: `data` (DataFrame with a `Log_Ret` column), `last_price`, `last_date`, `mu` (annualized mean log return using a 365-day year), and `sigma` (annualized volatility using a 365-day year). If `target_price` is unset, it is initialized to twice the last observed price. The method also prints a short summary of the loaded data range and record count.
+        """
         print(f"📡 Connecting to {self.ticker} oracle...")
         self.data = yf.download(self.ticker, period="max", auto_adjust=True, progress=False)
 
@@ -78,6 +104,16 @@ class CryptoBattleModel:
 
     def build_markov_brain(self):
         # Discretize into 6 states
+        """
+        Constructs a discrete Markov regime model from historical log returns and records the current regime.
+        
+        This method discretizes historical log returns into the configured number of regimes, computes one-step transition counts normalized into transition probabilities, stabilizes the matrix to ensure all regime-to-regime entries exist (missing transitions become zeros), and stores the resulting state information on the instance.
+        
+        Side effects:
+        - Adds/updates self.data['State_Idx'] with regime indices and self.data['Next_State'] with the next-day regime.
+        - Sets self.current_state to the most recent regime index.
+        - Sets self.markov_matrix to a square (n_states x n_states) transition probability DataFrame with missing entries filled as 0.
+        """
         self.data['State_Idx'] = pd.qcut(self.data['Log_Ret'], q=self.n_states, labels=False)
         self.current_state = int(self.data['State_Idx'].iloc[-1])
 
@@ -94,7 +130,12 @@ class CryptoBattleModel:
         print(f"🧠 Crypto Markov brain built: {self.n_states} regimes")
 
     def simulate_gbm(self):
-        """GBM with crypto-adjusted parameters (365-day year)"""
+        """
+        Simulate geometric Brownian motion price paths using the model's annualized drift and volatility with a 365-day year.
+        
+        Returns:
+            price_paths (numpy.ndarray): Array of shape (simulations, days_ahead) containing simulated price trajectories starting from `self.last_price`, where each row is a single simulation and each column is the price at that day ahead.
+        """
         dt = 1/365  # Crypto trades every day
         Z = np.random.normal(0, 1, (self.simulations, self.days_ahead))
 
@@ -107,7 +148,14 @@ class CryptoBattleModel:
         return price_paths
 
     def simulate_markov(self):
-        """Markov with empirical fat-tail sampling"""
+        """
+        Simulate price paths by sampling daily log-returns from empirical return pools conditioned on Markov regime transitions.
+        
+        Each simulated path starts from the model's current price and evolves for the configured horizon by: drawing next regimes using the stored Markov transition matrix, sampling a historical log-return from the pool of returns observed in the drawn regime, accumulating log-returns, and converting to prices. The method uses the instance's empirical return pools, markov_matrix, last_price, simulations, and days_ahead to produce the paths.
+        
+        Returns:
+            np.ndarray: Array of shape (simulations, days_ahead) containing simulated price paths.
+        """
         return_pools = {
             s: self.data[self.data['State_Idx'] == s]['Log_Ret'].values
             for s in range(self.n_states)
@@ -138,6 +186,16 @@ class CryptoBattleModel:
         return price_paths
 
     def analyze_first_passage_time(self, paths):
+        """
+        Compute the probability and first-passage times for reaching the configured target price.
+        
+        Parameters:
+            paths (ndarray): Simulated price paths with shape (n_simulations, n_days), where each row is a single simulation trajectory.
+        
+        Returns:
+            prob_success (float): Fraction of simulations that reach or exceed `self.target_price` at least once.
+            valid_times (ndarray): 1-D array of first day indices (0-based) at which each successful simulation first reaches or exceeds `self.target_price`; contains one entry per successful simulation.
+        """
         hits = np.any(paths >= self.target_price, axis=1)
         raw_times = np.argmax(paths >= self.target_price, axis=1)
         valid_times = raw_times[hits]
@@ -145,7 +203,16 @@ class CryptoBattleModel:
         return prob_success, valid_times
 
     def calculate_regime_metrics(self):
-        """Calculate key regime stickiness metrics"""
+        """
+        Compute regime persistence and key transition probabilities from the Markov transition matrix.
+        
+        Returns:
+            dict: A dictionary containing:
+                - 'persistence' (dict): Mapping of regime name to its self-transition probability (probability of remaining in the same regime).
+                - 'mania_stickiness' (float): Probability of staying in the Mania regime.
+                - 'capitulation_stickiness' (float): Probability of staying in the Capitulation regime.
+                - 'mania_to_cap_prob' (float): Probability of transitioning from Mania to Capitulation (crash risk from Mania).
+        """
         matrix = self.markov_matrix.values
 
         # Diagonal values = regime persistence
@@ -163,6 +230,19 @@ class CryptoBattleModel:
         }
 
     def run_battle(self):
+        """
+        Run the model comparison between the GBM (theory) and Markov (reality) simulators for the configured asset.
+        
+        Performs the simulations, computes first-passage statistics to the configured target price, prints a run summary and regime metrics, displays comparison visualizations (forecast cone, first-passage density, and regime heatmap), and returns the numeric results and simulated paths.
+        
+        Returns:
+            result (dict): Summary and outputs of the battle with keys:
+                - 'prob_gbm' (float): Probability that a GBM simulation reaches the target price within the horizon.
+                - 'prob_markov' (float): Probability that a Markov simulation reaches the target price within the horizon.
+                - 'reality_premium' (float): Difference `prob_markov - prob_gbm`.
+                - 'paths_gbm' (np.ndarray): Simulated GBM price paths (shape: simulations x days_ahead).
+                - 'paths_markov' (np.ndarray): Simulated Markov price paths (shape: simulations x days_ahead).
+        """
         print(f"\n{'='*70}")
         print(f"🪙 CRYPTO MODEL BATTLE: {self.ticker}")
         print(f"{'='*70}")

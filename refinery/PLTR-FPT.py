@@ -53,7 +53,39 @@ class TriadRiskEngine:
 
     def __init__(self, ticker, days_ahead=126, simulations=5000,
                  target_up=None, target_down=None):
-        self.ticker = ticker
+        """
+                 Initialize a TriadRiskEngine instance for scenario simulation and risk analysis.
+                 
+                 Parameters:
+                     ticker (str): Security ticker symbol used for data ingestion.
+                     days_ahead (int): Simulation horizon in trading days (default 126).
+                     simulations (int): Number of Monte Carlo / Markov simulated paths (default 5000).
+                     target_up (float | None): Optional upside (moonshot) price target; can be set later if None.
+                     target_down (float | None): Optional downside (stress) price target; can be set later if None.
+                 
+                 Attributes:
+                     ticker (str): Provided ticker symbol.
+                     days_ahead (int): Simulation horizon.
+                     simulations (int): Number of simulated paths.
+                     target_up (float | None): Upside target.
+                     target_down (float | None): Downside target.
+                     data (pandas.DataFrame | None): Placeholder for downloaded price and feature data.
+                     markov_matrix (numpy.ndarray | None): VIX-adjusted Markov transition matrix.
+                     markov_matrix_raw (numpy.ndarray | None): Raw Markov transition matrix before VIX adjustment.
+                     mu (float): Annualized mean log return (initialized to 0).
+                     sigma (float): Annualized return volatility (initialized to 0).
+                     last_price (float): Most recent adjusted close price (initialized to 0).
+                     last_date (datetime.date | None): Date of the most recent price (initialized to None).
+                     current_state (int): Index of current regime state (initialized to 0).
+                     n_states (int): Number of regime states (5).
+                     state_map (dict): Mapping of state indices to regime labels.
+                     vix_level (float): Latest VIX level (initialized to 0).
+                     vix_alert (bool): Flag indicating VIX alert state.
+                     is_anomaly (bool): Flag indicating if latest observation is anomalous.
+                     anomaly_score (float): Anomaly score for the latest observation.
+                     garch_forecast (float | None): Optional GARCH volatility forecast.
+                 """
+                 self.ticker = ticker
         self.days_ahead = days_ahead
         self.simulations = simulations
 
@@ -85,6 +117,18 @@ class TriadRiskEngine:
     # =========================================================================
 
     def ingest_data(self):
+        """
+        Load 5 years of price and volume data for the engine's ticker and compute primary return and volatility metrics.
+        
+        Fetches adjusted daily data via yfinance, computes log returns and a 20-day normalized volume series, drops missing rows, and updates the engine's derived attributes. Attributes set:
+            - self.data (pd.DataFrame): downloaded data with 'Log_Ret' and 'Volume_Norm' columns.
+            - self.last_price (float): most recent close price.
+            - self.last_date (pd.Timestamp): date of the most recent row.
+            - self.mu (float): annualized mean log return.
+            - self.sigma (float): annualized log return volatility.
+            - self.target_up (float): upside target (set to last_price * 1.5 if not provided).
+            - self.target_down (float): downside target (set to last_price * 0.7 if not provided).
+        """
         print(f"[DATA] Loading {self.ticker}...")
         self.data = yf.download(self.ticker, period="5y", auto_adjust=True, progress=False)
 
@@ -111,6 +155,11 @@ class TriadRiskEngine:
     # =========================================================================
 
     def build_markov_core(self):
+        """
+        Constructs the Markov regime core by assigning discrete regime indices and computing the state transition matrix.
+        
+        Creates a 'State_Idx' column by partitioning 'Log_Ret' into `n_states` quantile buckets, sets a shifted 'Next_State' column, and records the most recent regime index in `current_state`. Builds a row-normalized transition matrix (reindexed to include all states) and stores it in `markov_matrix_raw`, then copies it to `markov_matrix`.
+        """
         print("[LAYER 1] Building Markov Core...")
 
         self.data['State_Idx'] = pd.qcut(self.data['Log_Ret'], q=self.n_states, labels=False)
@@ -132,6 +181,11 @@ class TriadRiskEngine:
     # =========================================================================
 
     def apply_vix_filter(self):
+        """
+        Assess recent VIX and adjust the Markov transition matrix and internal VIX state accordingly.
+        
+        Fetches recent VIX level and sets self.vix_level and self.vix_alert. Depending on the VIX regime, the method may modify self.markov_matrix to tilt transition probabilities toward downside or upside (adjusting the engine's regime transition tendencies). The method also prints a short status summary. If VIX cannot be fetched, a default neutral level is assigned and the matrix is left unchanged.
+        """
         print("[LAYER 2] VIX Filter (Macro Sensor)...")
 
         try:
@@ -188,6 +242,18 @@ class TriadRiskEngine:
     # =========================================================================
 
     def run_anomaly_detection(self):
+        """
+        Detects anomalous recent market behavior using an Isolation Forest and updates instance anomaly attributes.
+        
+        If sklearn is unavailable, the method returns without modifying anomaly-related attributes. When executed, the detector uses Log_Ret, Volume_Norm, and 5-day rolling volatility as features, fits an Isolation Forest (contamination 2%), and evaluates the most recent observation.
+        
+        Attributes set on the instance:
+            anomaly_score (float): model score for the latest observation (lower = more anomalous).
+            is_anomaly (bool): True if the latest observation is classified as an anomaly.
+        
+        Notes:
+            The method also computes and prints a count of anomalies in the most recent 20-day window but does not persist that count to an attribute.
+        """
         print("[LAYER 3] Anomaly Engine (Isolation Forest)...")
 
         if not SKLEARN_AVAILABLE:
@@ -231,6 +297,11 @@ class TriadRiskEngine:
     # =========================================================================
 
     def run_garch_forecast(self):
+        """
+        Fit a GARCH(1,1) model to historical log returns and store a 5-day volatility forecast on the instance.
+        
+        Fits a GARCH(1,1) to self.data['Log_Ret'] (scaled by 100), forecasts variance over a 5-day horizon, converts the forecasted variances to standard deviations, rescales them back (divide by 100), and assigns the resulting 1-D NumPy array to self.garch_forecast. If the required `arch` package is not available the method returns without changing state. Any model-fitting errors are caught and reported but not raised.
+        """
         print("[OPTIONAL] GARCH Volatility Forecast...")
 
         if not ARCH_AVAILABLE:
@@ -255,7 +326,12 @@ class TriadRiskEngine:
     # =========================================================================
 
     def simulate_markov(self):
-        """Markov simulation with empirical fat-tail sampling."""
+        """
+        Simulate future price paths using the Markov regime transition matrix and empirical regime return samples.
+        
+        Returns:
+            simulated_paths (np.ndarray): Array of simulated price paths with shape (simulations, days_ahead) where each row is a future price trajectory starting from `self.last_price` for the configured horizon.
+        """
         return_pools = {
             s: self.data[self.data['State_Idx'] == s]['Log_Ret'].values
             for s in range(self.n_states)
@@ -285,9 +361,16 @@ class TriadRiskEngine:
 
     def analyze_stress_hit_rate(self, paths, target, direction="up"):
         """
-        FIXED: Proper hit rate calculation with direction.
-        direction="up"   -> checks if price breaks ABOVE target (moonshots)
-        direction="down" -> checks if price drops BELOW target (stress tests)
+        Compute the proportion of simulated price paths that reach a specified target and the first-passage times for those that do.
+        
+        Parameters:
+            paths (array-like, shape (n_paths, n_steps)): Simulated price paths where each row is a single path over time.
+            target (float): Price level to test for crossing.
+            direction (str, optional): "up" to test for reaching or exceeding the target, "down" to test for falling to or below the target. Defaults to "up".
+        
+        Returns:
+            hit_rate (float): Fraction of paths that hit the target (value between 0 and 1).
+            valid_times (ndarray): 1-D array of first-passage time indices for paths that hit the target.
         """
         if direction == "down":
             hits = np.any(paths <= target, axis=1)
@@ -308,7 +391,22 @@ class TriadRiskEngine:
     # =========================================================================
 
     def run_full_analysis(self):
-        """Execute the complete Triad analysis."""
+        """
+        Run the complete Triad analysis pipeline and produce summary results and visualizations.
+        
+        This method executes all detection layers (Markov Core, VIX Filter, Anomaly Engine, optional GARCH forecast), runs Monte Carlo stress simulations, prints a status summary and recommendations, renders the Triad visualization, and returns the combined results.
+        
+        Returns:
+            result (dict): Summary dictionary with keys:
+                - can_fly (bool): Recommendation whether it is advisable to trade under current conditions.
+                - vix_level (float): Latest VIX level used for filtering.
+                - vix_alert (bool): Whether the VIX-triggered alert/tilt is active.
+                - is_anomaly (bool): Whether the latest observation was flagged as an anomaly.
+                - current_regime (str): Human-readable label of the current market regime.
+                - prob_up (float): Empirical probability that simulated paths reach the upside target within the horizon.
+                - prob_down (float): Empirical probability that simulated paths reach the downside target within the horizon.
+                - paths (numpy.ndarray): Simulated price path matrix of shape (n_simulations, days_ahead).
+        """
 
         print("\n" + "="*70)
         print("TRIAD RISK ENGINE v3.0")
@@ -410,7 +508,21 @@ class TriadRiskEngine:
         }
 
     def _plot_triad(self, paths, prob_up, prob_down, times_up, times_down):
-        """Visualize the Triad analysis."""
+        """
+        Render a four-panel visualization summarizing the Triad analysis results.
+        
+        Displays:
+        - price scenario bands (median, 50% and 80% ranges) with upside/downside target lines and current price;
+        - time-to-target histograms for upside and downside (or a summary note when hits are rare);
+        - Markov regime transition heatmap (annotated and optionally showing VIX tilt).
+        
+        Parameters:
+            paths (ndarray): Simulated price paths shaped (n_simulations, days_ahead).
+            prob_up (float): Empirical probability of reaching the upside target over the horizon (0-1).
+            prob_down (float): Empirical probability of reaching the downside target over the horizon (0-1).
+            times_up (array-like): First-passage times (in days) for simulations that hit the upside target.
+            times_down (array-like): First-passage times (in days) for simulations that hit the downside target.
+        """
 
         fig = plt.figure(figsize=(20, 12))
         gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1])

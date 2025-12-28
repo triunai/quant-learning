@@ -116,6 +116,20 @@ class RegimeRiskEngine:
         self.implied_daily_drift = 0
 
     def ingest_data(self):
+        """
+        Load price data for the engine's ticker and compute derived time series and benchmarks.
+        
+        Populates the engine's data and derived attributes used by subsequent steps:
+        - data: DataFrame with adjusted price series and computed fields `Log_Ret`, `Volume_Norm`, `Vol_20d`.
+        - last_price, last_date: latest close price and timestamp.
+        - mu: annualized mean of log returns.
+        - sigma, realized_vol: annualized standard deviation of log returns (realized volatility).
+        - hist_6mo_returns: rolling aggregated log returns over the configured horizon (days_ahead).
+        - hist_6mo_median, hist_6mo_std: median and standard deviation of hist_6mo_returns.
+        - target_up, target_down, soft_ceiling: default target levels computed from last_price when not previously set.
+        
+        This method also drops rows with missing values and prints a brief summary of the loaded data and historical median return.
+        """
         print(f"[DATA] Loading {self.ticker}...")
 
         df = yf.download(self.ticker, period="5y", auto_adjust=True, progress=False)
@@ -155,6 +169,20 @@ class RegimeRiskEngine:
         print(f"    Historical 6mo median: {hist_6mo_pct:+.1f}% (log: {self.hist_6mo_median:+.3f})")
 
     def build_markov_core(self):
+        """
+        Constructs a quantile-based state partition, builds a smoothed Markov transition matrix, and prepares per-state return pools and statistics used by simulations.
+        
+        This method:
+        - Assigns each historical return to a quantile bucket (state) and may adjust `self.n_states` and `self.state_map` if the bucketing produces a different number of states.
+        - Builds the raw transition counts between consecutive states and stores them in `self.markov_matrix_raw`.
+        - Produces a row-stochastic, Laplace-smoothed transition matrix with a uniform fallback for any invalid rows and stores it in `self.markov_matrix`.
+        - Collects per-state return samples into `self.return_pools` and records per-state mean returns in `self.state_means` (uses a default [0] / 0.0 for empty states).
+        - Sets `self.current_state` and `self.state_history` based on recent data.
+        - Invokes `_compute_stationary_distribution()` to compute and store the stationary distribution and implied daily drift.
+        - Invokes `_calculate_fuzzy_initialization()` to set `self.initial_state_dist` and `self.regime_confidence`.
+        
+        Side effects (attributes updated): self.data['State_Idx'], self.current_state, self.state_history, self.n_states (possibly), self.state_map (possibly), self.markov_matrix_raw, self.markov_matrix, self.return_pools, self.state_means, and diagnostic quantities produced by the helper methods.
+        """
         print("[MARKOV] Building transition matrix...")
 
         # Use rank-based quantiles for stability
@@ -273,8 +301,9 @@ class RegimeRiskEngine:
 
     def apply_vix_filter(self):
         """
-        VIX stickiness via convex blend with identity.
-        FIXED: α is now proportional to raw persistence to avoid inflation.
+        Adjust the Markov transition matrix's state persistence based on the current VIX level.
+        
+        Fetches recent VIX, sets self.vix_level (defaults to 20 on fetch failure) and self.vix_alert, selects a base stickiness factor from VIX thresholds, scales that factor by (1 - raw diagonal persistence) to reduce blending when the matrix is already sticky, and applies a convex blend of the transition matrix with the identity matrix to increase state self-transition probabilities.
         """
         if not self.enable_vix:
             return
@@ -328,6 +357,15 @@ class RegimeRiskEngine:
         print(f"    Stickiness blend α={alpha:.2f}")
 
     def run_anomaly_detection(self):
+        """
+        Detect anomalies in the latest observation using an Isolation Forest over recent return, volume, and volatility features.
+        
+        Fits an IsolationForest on historical vectors composed of Log_Ret, Volume_Norm, and Vol_20d, then evaluates the most recent observation. On completion sets:
+        - self.anomaly_score: the model score for the latest observation.
+        - self.is_anomaly: True if the latest observation is flagged as an anomaly, False otherwise.
+        
+        No value is returned. The method is a no-op if anomaly detection is disabled or sklearn is unavailable.
+        """
         if not self.enable_anomaly or not SKLEARN_OK:
             return
 
@@ -353,6 +391,11 @@ class RegimeRiskEngine:
         print(f"    Status: {status} | Score: {self.anomaly_score:.3f}")
 
     def run_garch_forecast(self):
+        """
+        Fit a short-term GARCH volatility model to recent log returns and update the engine's volatility forecast and scaling.
+        
+        If GARCH is enabled and the ARCH dependency is available, fits a GARCH(1,1) model to recent log returns, computes a multi-day volatility forecast (stored in `self.garch_vol_forecast`), and sets `self.vol_scale` to the ratio of the forecasted annualized volatility to `self.realized_vol`, clamped to the range [0.5, 2.0]. On any failure the method leaves `self.garch_vol_forecast` as-is (if present) and resets `self.vol_scale` to 1.0. The method exits immediately when GARCH is disabled or the ARCH library is unavailable.
+        """
         if not self.enable_garch or not ARCH_OK:
             return
 
@@ -462,8 +505,26 @@ class RegimeRiskEngine:
 
     def sanity_check(self, paths):
         """
-        Enhanced sanity check with HISTORICAL HIT-RATE VALIDATION.
-        This is the truth serum - compares sim hit rates to actual history.
+        Performs sanity checks comparing simulated price-path outcomes to historical benchmarks and Markov persistence diagnostics.
+        
+        Parameters:
+            paths (np.ndarray): Simulated price paths shaped (n_simulations, n_days); final prices use paths[:, -1].
+        
+        Returns:
+            dict: Diagnostics including:
+                - sim_median_log: median simulated 6-month log return
+                - hist_median_log: historical 6-month median log return
+                - z_score: z-score of simulated median vs historical median
+                - pct_2x: percent of simulations with final price >= 2× last price
+                - pct_3x: percent of simulations with final price >= 3× last price
+                - pct_half: percent of simulations with final price <= 0.5× last price
+                - hist_up_hit: historical first-passage hit rate for the up target
+                - hist_down_hit: historical first-passage hit rate for the down target
+                - raw_diag: mean of the raw transition-matrix diagonal
+                - smoothed_diag: mean of the smoothed transition-matrix diagonal
+        
+        Side effects:
+            Prints formatted sanity-check, historical hit-rate validation, and persistence-check summaries to stdout.
         """
         final = paths[:, -1]
 
@@ -635,6 +696,27 @@ class RegimeRiskEngine:
         }
 
     def run(self, plot=True):
+        """
+        Run the full RegimeRiskEngine pipeline: calibrate, simulate forward paths, analyze first-passage probabilities, perform sanity checks, and produce a trade signal.
+        
+        Parameters:
+            plot (bool): If True, generate and return a matplotlib Figure showing simulation diagnostics and distributions.
+        
+        Returns:
+            results (dict): Aggregated outputs from the run, containing:
+                - 'paths': ndarray of simulated price paths with shape (simulations, days_ahead).
+                - 'prob_up': float probability of reaching the configured upside target within the horizon.
+                - 'prob_down': float probability of reaching the configured downside target within the horizon.
+                - 'times_up': ndarray of first-passage times to the upside target for each path (NaN if not hit).
+                - 'times_down': ndarray of first-passage times to the downside target for each path (NaN if not hit).
+                - 'convexity': dict of distributional metrics (skewness, kurtosis, upside_vol, downside_vol).
+                - 'sanity': dict of sanity-check diagnostics and statistics.
+            signal (dict): Trading signal summary with keys such as:
+                - 'signal': str trading action ('LONG', 'SHORT', 'NEUTRAL', 'CASH', etc.).
+                - 'confidence': int confidence score (bounded 30–85).
+                - 'reasoning': list of strings explaining key factors for the signal.
+            fig (matplotlib.figure.Figure or None): Visualization of simulation results and diagnostics when plot=True, otherwise None.
+        """
         print("\n" + "="*70)
         print(f"REGIME RISK ENGINE v6.0 (CALIBRATED) - {self.ticker}")
         print(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -676,6 +758,20 @@ class RegimeRiskEngine:
         return results, signal, fig
 
     def _print_summary(self, results, signal, sanity):
+        """
+        Prints a formatted summary of the engine state, target hit probabilities, distributional percentiles of simulated end prices, and the generated trade signal.
+        
+        Parameters:
+            results (dict): Simulation results containing at least:
+                - 'prob_up' (float): Probability of hitting the upper target.
+                - 'prob_down' (float): Probability of hitting the lower target.
+                - 'paths' (array-like): Simulated price paths with shape (simulations, days).
+            signal (dict): Signal dictionary with keys:
+                - 'signal' (str): Signal name (e.g., 'LONG', 'SHORT', 'NEUTRAL', 'CASH').
+                - 'confidence' (int or float): Confidence percentage.
+                - 'reasoning' (list[str]): Human-readable reasoning lines.
+            sanity (dict): Additional diagnostics produced by sanity_check (accepted but not displayed by this method).
+        """
         print(f"\n{'='*70}")
         print("SUMMARY")
         print("="*70)
@@ -706,6 +802,20 @@ class RegimeRiskEngine:
         print("="*70)
 
     def _plot(self, paths, prob_up, prob_down, times_up, times_down, signal):
+        """
+        Create a multi-panel diagnostic figure summarizing simulation outcomes, first-passage statistics, and the smoothed Markov transition matrix.
+        
+        Parameters:
+            paths (ndarray): Simulated price paths with shape (simulations, days_ahead).
+            prob_up (float): Probability that a path reaches the upward target.
+            prob_down (float): Probability that a path reaches the downward target.
+            times_up (array-like): Time-to-hit samples (in days) for the upward target.
+            times_down (array-like): Time-to-hit samples (in days) for the downward target.
+            signal (dict): Signal dictionary containing at least the 'signal' key used to color the title.
+        
+        Returns:
+            matplotlib.figure.Figure: Matplotlib Figure containing four panels — (1) percentile bands and median trajectory with target lines, (2) histogram or rarity note for time-to-up, (3) histogram or rarity note for time-to-down, and (4) heatmap of the smoothed transition matrix.
+        """
         fig = plt.figure(figsize=(18, 10))
         gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1])
 

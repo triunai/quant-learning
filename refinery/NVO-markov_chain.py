@@ -11,6 +11,21 @@ sns.set_palette("flare")
 
 class BlendedMarkovModel:
     def __init__(self, ticker, n_states=5):
+        """
+        Initialize the BlendedMarkovModel for a given stock ticker and number of regime states.
+        
+        Parameters:
+            ticker (str): Stock ticker symbol used to fetch historical price data.
+            n_states (int): Number of discrete regime states to create (default 5).
+        
+        Attributes:
+            state_map (dict): Mapping from state index to regime name.
+            data_10y (pandas.DataFrame | None): Processed 10-year price and state data once built.
+            data_5y (pandas.DataFrame | None): Processed 5-year price and state data once built.
+            matrix_10y (pandas.DataFrame | None): Transition probability matrix derived from 10-year data.
+            matrix_5y (pandas.DataFrame | None): Transition probability matrix derived from 5-year data.
+            matrix_blended (pandas.DataFrame | None): Blended transition matrix combining 5y and 10y matrices.
+        """
         self.ticker = ticker
         self.n_states = n_states
         self.state_map = {0: "Crash", 1: "Bear", 2: "Flat", 3: "Bull", 4: "Rally"}
@@ -21,7 +36,17 @@ class BlendedMarkovModel:
         self.matrix_blended = None
 
     def _process_data(self, period):
-        """Internal helper to fetch and bin data robustly."""
+        """
+        Fetches historical prices for the given period, computes log returns, assigns quantile-based state indices, and constructs a stable n_states × n_states transition matrix.
+        
+        Parameters:
+            period (str): yfinance period string (e.g., "10y", "5y") used to download historical price data.
+        
+        Returns:
+            tuple:
+                df (pandas.DataFrame): The processed data containing at least the columns `Close`, `Log_Ret`, `State_Idx`, and `Next_State_Idx`.
+                matrix (pandas.DataFrame): Row-normalized transition probability matrix of shape (n_states, n_states) with missing transitions filled with 0.
+        """
         print(f"📡 Fetching {period} data for {self.ticker}...")
         df = yf.download(self.ticker, period=period, progress=False, auto_adjust=True)
         df['Log_Ret'] = np.log(df['Close'] / df['Close'].shift(1))
@@ -43,14 +68,28 @@ class BlendedMarkovModel:
 
     def build_models(self):
         # Build independent chains
+        """
+        Builds the base Markov models from 10-year and 5-year historical data for the configured ticker.
+        
+        Processes 10-year and 5-year price series to compute log-return states and transition matrices, and assigns the results to instance attributes:
+        - data_10y: processed DataFrame for the 10-year period
+        - matrix_10y: 5x5 transition probability matrix from the 10-year data
+        - data_5y: processed DataFrame for the 5-year period
+        - matrix_5y: 5x5 transition probability matrix from the 5-year data
+        """
         self.data_10y, self.matrix_10y = self._process_data("10y")
         self.data_5y, self.matrix_5y = self._process_data("5y")
         print("✅ Base models built.")
 
     def blend_matrices(self, weight_5y=0.7):
         """
-        The 'Quant' Upgrade: Blends short-term regime (5y) with long-term structure (10y).
-        weight_5y: 0.7 means 70% influence from recent data.
+        Blend the 5-year and 10-year transition matrices into a single normalized transition matrix.
+        
+        Parameters:
+            weight_5y (float): Fractional weight applied to the 5-year transition matrix (0.0 to 1.0). Higher values give more influence to recent (5y) data.
+        
+        Notes:
+            Sets the instance attribute `matrix_blended` to the row-normalized weighted combination of `matrix_5y` and `matrix_10y`.
         """
         print(f"⚖️ Blending Matrices: {weight_5y*100}% 5Y + {(1-weight_5y)*100}% 10Y")
         self.matrix_blended = (self.matrix_5y * weight_5y) + (self.matrix_10y * (1 - weight_5y))
@@ -59,6 +98,11 @@ class BlendedMarkovModel:
         self.matrix_blended = self.matrix_blended.div(self.matrix_blended.sum(axis=1), axis=0)
 
     def visualize_blended_matrix(self):
+        """
+        Display a heatmap of the blended state transition matrix using human-readable regime labels.
+        
+        The plot labels rows and columns with regime names from the model's state_map and titles the figure with the model's ticker.
+        """
         fig, ax = plt.subplots(figsize=(10, 8))
 
         # Remap index/columns to names for the plot
@@ -72,8 +116,14 @@ class BlendedMarkovModel:
 
     def run_simulation(self, days=126, simulations=5000):
         """
-        VECTORIZED Monte Carlo simulation for speed.
-        Uses Blended Matrix for transitions + 5Y Empirical Data for returns.
+        Perform a vectorized Monte Carlo simulation of future price paths using the blended transition matrix and empirical 5-year log-return pools.
+        
+        Parameters:
+        	days (int): Number of trading days to simulate per path (horizon).
+        	simulations (int): Number of independent Monte Carlo price paths to generate.
+        
+        Returns:
+        	sim_paths (numpy.ndarray): Array of shape (simulations, days) containing simulated price levels for each path and day, starting from the most recent 5-year close.
         """
         last_price = self.data_5y['Close'].iloc[-1].item()
         last_state = int(self.data_5y['State_Idx'].iloc[-1])
@@ -116,7 +166,16 @@ class BlendedMarkovModel:
         return sim_paths
 
     def get_current_info(self):
-        """Returns current price, date, and state for display."""
+        """
+        Provide a snapshot of the latest observed market state for the ticker.
+        
+        Returns:
+            info (dict): Dictionary with the latest observation:
+                - price (float): Last closing price.
+                - date (Timestamp): Timestamp or index label of the last observation.
+                - state (int): Numeric state index for the last observation.
+                - state_name (str): Human-readable regime name mapped from the state index.
+        """
         last_price = self.data_5y['Close'].iloc[-1].item()
         last_date = self.data_5y.index[-1]
         last_state = int(self.data_5y['State_Idx'].iloc[-1])

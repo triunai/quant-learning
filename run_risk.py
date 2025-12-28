@@ -1,4 +1,3 @@
-
 import sys
 import os
 
@@ -12,6 +11,11 @@ except ImportError as e:
     sys.exit(1)
 
 def main():
+    """
+    Run the PLTR RegimeRiskEngine workflow and persist results.
+    
+    Instantiates a RegimeRiskEngine for ticker "PLTR", ingests data, runs the simulation with plotting enabled, saves the returned figure to "pltr_risk.png" when present, and writes a plain-text summary to "risk_summary.txt" containing the signal, its confidence, the reasoning lines, and the Prob Up / Prob Down statistics.
+    """
     print("Initializing Regime Risk Engine for PLTR...")
     engine = RegimeRiskEngine(ticker="PLTR")
 

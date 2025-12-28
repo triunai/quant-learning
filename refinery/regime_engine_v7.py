@@ -44,7 +44,23 @@ class RegimeRiskEngineV7:
                  enable_vix=True):
 
         # Initialize the underlying v7.0 platform
-        self.platform = RegimeRiskPlatform(
+        """
+                 Create a Streamlit-friendly wrapper around the RegimeRiskPlatform v7.0 for the given ticker.
+                 
+                 Parameters:
+                     ticker (str): Security ticker to model.
+                     market_ticker (str): Market benchmark ticker used for beta computation.
+                     days_ahead (int): Forecast horizon in trading days for simulations.
+                     simulations (int): Number of Monte Carlo simulation paths to run.
+                     target_up (float|None): Price target above current price for "up" first-passage analysis; None to defer to platform defaults.
+                     target_down (float|None): Price target below current price for "down" first-passage analysis; None to defer to platform defaults.
+                     stop_loss_pct (float): Fractional stop-loss threshold (e.g., 0.15 for 15%).
+                     n_regimes (int): Number of regimes to fit in the regime model.
+                     enable_vix (bool): If True, include VIX/macro context checks in the workflow.
+                 
+                 Initializes an underlying RegimeRiskPlatform instance and sets lightweight attributes (placeholders and configuration) that are exposed for dashboard use.
+                 """
+                 self.platform = RegimeRiskPlatform(
             ticker=ticker,
             market_ticker=market_ticker,
             days_ahead=days_ahead,
@@ -71,7 +87,12 @@ class RegimeRiskEngineV7:
         self.transition_matrix = None
 
     def ingest_data(self):
-        """Load and prepare data via the underlying platform."""
+        """
+        Load and prepare data using the underlying platform and update exposed wrapper attributes.
+        
+        Calls the underlying platform's ingest_data method and synchronizes the wrapper's
+        last_price, target_up, target_down, and realized_vol attributes with the platform.
+        """
         self.platform.ingest_data()
 
         # Sync exposed attributes
@@ -82,11 +103,22 @@ class RegimeRiskEngineV7:
 
     def run(self, plot=False, run_full_calibration=False):
         """
-        Execute the v7.0 simulation and return Streamlit-compatible results.
-
+        Run the v7.0 simulation workflow and assemble Streamlit-compatible results and a trading signal.
+        
+        Parameters:
+            plot (bool): Optional; provided for compatibility. This wrapper does not produce interactive plots, so the flag is ignored.
+            run_full_calibration (bool): If True, perform the full calibration sequence (asymmetry diagnostics, multi-threshold calibration, and walk‑forward validation) before simulating.
+        
         Returns:
-            results (dict): Contains paths, prob_up, prob_down, risk, etc.
-            signal (dict): Contains signal, confidence, reasoning.
+            results (dict): Aggregated outputs for dashboard display, including:
+                - paths: simulated price paths
+                - prob_up / prob_down: first-passage probabilities to the up/down targets
+                - risk: computed risk metrics
+                - regime_diagnostics: per-regime summary dicts (name, sample count, avg drawdown, avg vol, mu, sigma, alpha, avg_duration)
+                - sanity: historical hit checks ('hist_up_hit', 'hist_down_hit')
+                - macro: macro metrics (beta, annualized alpha, idiosyncratic vol, vix, garch_vol, realized_vol)
+                - times_up / times_down: placeholder lists
+            signal (dict): Signal information produced from the simulated probabilities and risk metrics (e.g., signal, confidence, reasoning).
         """
         # Build models
         self.platform.build_regime_model()
