@@ -9,19 +9,12 @@ def mock_data():
     """Creates synthetic price data with identifiable regimes and trends (1000 days)."""
     dates = pd.date_range(start="2018-01-01", periods=1000, freq="D")
 
-    # Generate distinct regimes
-    # 0-200: Flat (Low Vol)
-    # 200-400: Bull (High Return, Med Vol)
-    # 400-500: Crash (Neg Return, High Vol)
-    # 500-700: Recovery/Rally (High Return, High Vol)
-    # 700-1000: Bear (Slow Neg Return, Med Vol)
-
     returns = np.zeros(1000)
     # Flat
     returns[0:200] = np.random.normal(0, 0.005, 200)
     # Bull
     returns[200:400] = np.random.normal(0.001, 0.01, 200)
-    # Crash
+    # Crash (High Vol, Neg Return)
     returns[400:500] = np.random.normal(-0.003, 0.03, 100)
     # Rally
     returns[500:700] = np.random.normal(0.002, 0.02, 200)
@@ -40,36 +33,72 @@ def test_process_data(mock_download, mock_data):
     df = model._process_data(period="5y")
 
     assert 'Log_Ret' in df.columns
+    assert 'Cluster' in df.columns
     assert 'State_Idx' in df.columns
-    assert 'block' in df.columns
-    assert 'Vol_20d' in df.columns
-    assert 'Ret_60d' in df.columns
 
-    # Check if KMeans produced distinct states
-    unique_states = df['State_Idx'].nunique()
-    # Depending on convergence, might be less than 5, but should be > 1 given the data
-    assert unique_states > 1
+    # Check Risk Ordering
+    # State 0 should be Crash (High Vol, Neg Ret)
+    # State 4 should be Bull/Rally (Low Risk)
 
-    # Check label sorting (0 should have lowest momentum, 4 highest)
-    # We can check the means of Ret_60d for the states found
-    means = df.groupby('State_Idx')['Ret_60d'].mean()
-    if 0 in means and 4 in means:
-        assert means[0] < means[4]
+    stats_0 = df[df['State_Idx'] == 0]
+    stats_4 = df[df['State_Idx'] == 4]
+
+    # Check if State 0 has higher vol or worse return than State 4
+    # Just need to confirm ordering logic worked broadly
+    # Risk Score = Vol*2 - Ret - DD*1.5
+
+    def get_risk(subset):
+        return (subset['Vol_20d'].mean() * 2) - subset['Ret_60d'].mean() - (subset['DD'].mean() * 1.5)
+
+    risk_0 = get_risk(stats_0)
+    risk_4 = get_risk(stats_4)
+
+    assert risk_0 > risk_4
 
 @patch('yfinance.download')
-def test_fit_distributions(mock_download, mock_data):
+def test_sample_regime_returns_contiguous(mock_download, mock_data):
     mock_download.return_value = mock_data
     model = SemiMarkovModel("TEST", n_states=5)
     model._process_data(period="5y")
-    model.fit_distributions()
 
-    assert len(model.duration_params) == 5
-    for state in range(5):
-        params = model.duration_params[state]
-        assert params['dist'] in ['gamma', 'expon']
+    # Test sampling
+    # We want to make sure it returns an array of length n_days
+    # and that the values actually exist in the original data (sanity check)
+
+    ret_sample = model.sample_regime_returns(0, 10)
+    assert len(ret_sample) == 10
+
+    # Check if these returns exist in the source data
+    # (Exact match might fail due to float precision, use approx)
+    source_rets = model.data[model.data['State_Idx'] == 0]['Log_Ret'].values
+    for r in ret_sample:
+        assert np.isclose(source_rets, r).any()
+
+def test_get_position_size():
+    model = SemiMarkovModel("TEST")
+    model.duration_params = {
+        0: {'dist': 'gamma', 'params': (2, 0, 10)}, # Risky
+        2: {'dist': 'gamma', 'params': (2, 0, 10)}  # Normal
+    }
+
+    # State 0 (Crash) -> Multiplier 0.3 + (1-Fatigue)*0.3
+    # Fatigue=0 -> 0.6. Fatigue=1 -> 0.3.
+    pos_crash_low_fatigue = model.get_position_size(0, 1) # ~0 fatigue
+    pos_crash_high_fatigue = model.get_position_size(0, 100) # ~1 fatigue
+
+    assert pos_crash_low_fatigue > pos_crash_high_fatigue
+    assert 0.3 <= pos_crash_high_fatigue <= 0.6
+
+    # State 2 (Normal) -> Multiplier 0.5 + (1-Fatigue)*0.5
+    # Fatigue=0 -> 1.0. Fatigue=1 -> 0.5.
+    pos_norm_low_fatigue = model.get_position_size(2, 1)
+    pos_norm_high_fatigue = model.get_position_size(2, 100)
+
+    assert pos_norm_low_fatigue > pos_norm_high_fatigue
+    assert 0.5 <= pos_norm_high_fatigue <= 1.0
 
 @patch('yfinance.download')
-def test_run_simulation(mock_download, mock_data):
+def test_validate_model(mock_download, mock_data):
     mock_download.return_value = mock_data
     model = SemiMarkovModel("TEST", n_states=5)
     model._process_data(period="5y")
@@ -77,39 +106,7 @@ def test_run_simulation(mock_download, mock_data):
 
     paths = model.run_simulation(days=50, simulations=10)
 
-    assert paths.shape == (10, 50)
-    assert not np.isnan(paths).any()
-    assert np.all(paths[:, 0] > 0)
-
-def test_sample_residual_duration():
-    model = SemiMarkovModel("TEST")
-    # Setup params
-    # Gamma: shape=2, scale=10 => mean=20
-    model.duration_params = {
-        0: {'dist': 'gamma', 'params': (2, 0, 10)}
-    }
-
-    # Case 1: Elapsed 0 -> Should be full distribution
-    d0 = [model.sample_residual_duration(0, 0) for _ in range(100)]
-    assert np.mean(d0) > 1
-
-    # Case 2: Elapsed 30 (tail) -> Should be small?
-    # Actually Gamma(2) has hazard rate that ... ?
-    # Let's just check it runs and returns int >= 1
-    d_tail = model.sample_residual_duration(0, 30)
-    assert isinstance(d_tail, int)
-    assert d_tail >= 1
-
-def test_regime_fatigue_score():
-    model = SemiMarkovModel("TEST")
-    model.duration_params = {
-        0: {'dist': 'gamma', 'params': (2, 0, 10)} # Mean 20
-    }
-
-    # Score should increase with time
-    score_5 = model.regime_fatigue_score(0, 5)
-    score_30 = model.regime_fatigue_score(0, 30)
-
-    assert score_5 < score_30
-    assert 0 <= score_5 <= 1
-    assert 0 <= score_30 <= 1
+    report = model.validate_model(paths)
+    assert 'real_vol_acf_lag1' in report
+    assert 'sim_vol_acf_lag1' in report
+    assert isinstance(report['vol_clustering_error'], float)

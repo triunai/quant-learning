@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime
-from scipy.stats import gamma, expon
+from scipy.stats import gamma, expon, ks_2samp
 from sklearn.cluster import KMeans
 
 # Styles
@@ -15,7 +15,6 @@ class SemiMarkovModel:
     def __init__(self, ticker, n_states=5):
         self.ticker = ticker
         self.n_states = n_states
-        # State map will be dynamically assigned after clustering
         self.state_map = {}
         self.data = None
         self.duration_data = {}  # Store durations for each state
@@ -57,17 +56,12 @@ class SemiMarkovModel:
             print(f"⚠️ Clustering failed: {e}. Fallback to qcut.")
             df_clean['Cluster'] = pd.qcut(df_clean['Log_Ret'], q=self.n_states, labels=False, duplicates='drop')
 
-        # --- Sort Clusters to ensure 0=Crash, 4=Rally ---
-        # Sort by Mean 60d Return (Momentum)
-        cluster_stats = df_clean.groupby('Cluster')['Ret_60d'].mean().sort_values()
-
-        # Create mapping: Old Label -> New Sorted Label (0..4)
-        mapping = {old_label: new_label for new_label, old_label in enumerate(cluster_stats.index)}
+        # --- Sort Clusters by Risk ---
+        mapping = self._sort_clusters_by_risk(df_clean)
         df_clean['State_Idx'] = df_clean['Cluster'].map(mapping)
 
-        # Define state map based on sorted order
+        # Define state map
         base_names = ["Crash", "Bear", "Flat", "Bull", "Rally"]
-        # If n_states != 5, we might need generic names, but assuming 5 for now
         if self.n_states == 5:
             self.state_map = {i: name for i, name in enumerate(base_names)}
         else:
@@ -108,6 +102,32 @@ class SemiMarkovModel:
 
         return self.data
 
+    def _sort_clusters_by_risk(self, df):
+        """
+        Sorts clusters based on a composite risk score so State 0 is highest risk (Crash).
+        Risk Score = Vol * 2 + (-Return) + (-Drawdown * 1.5)
+        """
+        cluster_stats = []
+        for cluster in df['Cluster'].unique():
+            subset = df[df['Cluster'] == cluster]
+            # High Vol = Risk
+            vol = subset['Vol_20d'].mean()
+            # Low (Negative) Return = Risk
+            ret = subset['Ret_60d'].mean()
+            # Low (Negative) Drawdown = Risk (e.g. -0.5 is riskier than -0.1)
+            # We want deeper negative numbers to add to risk.
+            # So -DD (positive magnitude) adds to risk.
+            dd = subset['DD'].mean()
+
+            # Formula: Vol*2 - Ret - DD*1.5
+            # Example: Vol=0.2, Ret=-0.1, DD=-0.2 -> 0.4 - (-0.1) - (-0.2)*1.5 = 0.4+0.1+0.3 = 0.8
+            risk_score = (vol * 2) - ret - (dd * 1.5)
+            cluster_stats.append((cluster, risk_score))
+
+        # Sort by risk score descending (Highest Risk = 0)
+        cluster_stats.sort(key=lambda x: x[1], reverse=True)
+        return {old: new for new, (old, _) in enumerate(cluster_stats)}
+
     def fit_distributions(self):
         """Fits Gamma (high vol) and Exponential (low vol) distributions."""
         print("📊 Fitting duration distributions...")
@@ -117,9 +137,7 @@ class SemiMarkovModel:
                 self.duration_params[state] = {'dist': 'expon', 'params': (0, 1)}
                 continue
 
-            # Fit Gamma (general case)
             try:
-                # floc=0 enforces location at 0 (duration represents length)
                 a, loc, scale = gamma.fit(durations, floc=0)
                 self.duration_params[state] = {'dist': 'gamma', 'params': (a, loc, scale)}
             except:
@@ -139,92 +157,141 @@ class SemiMarkovModel:
         return max(1, int(round(d)))
 
     def sample_residual_duration(self, state, elapsed_days):
-        """
-        Samples remaining duration conditional on already being in state for elapsed_days.
-        Uses Inverse Transform Sampling for Gamma: T = F^{-1}(U + F(t)) - t
-        """
+        """Samples remaining duration using Inverse Transform Sampling."""
         params = self.duration_params[state]
         if params['dist'] == 'expon':
-            # Memoryless property: Residual life distribution is same as original
             return self.sample_duration(state)
 
-        # Gamma case
         a, loc, scale = params['params']
-
-        # Calculate CDF at current elapsed time (probability we exited before now)
         cdf_t = gamma.cdf(elapsed_days, a, loc=loc, scale=scale)
 
-        # If cdf_t is very close to 1, we are in the extreme tail.
-        # Fallback to simple rejection or just return 1 to avoid numerical instability
         if cdf_t > 0.999:
              return 1
 
-        # Sample U ~ Uniform(CDF(t), 1)
-        # This represents the cumulative probability of the TOTAL duration
         u = np.random.uniform(cdf_t, 1.0)
-
-        # Invert CDF to get total duration
         total_duration = gamma.ppf(u, a, loc=loc, scale=scale)
-
         remaining = total_duration - elapsed_days
         return max(1, int(round(remaining)))
 
     def sample_regime_returns(self, state, n_days):
         """
-        Samples a block of returns from the historical data for the given state.
-        Preserves autocorrelation/volatility clustering better than random sampling.
+        Samples contiguous historical runs of this state to preserve autocorrelation.
         """
-        # Get all returns classified as this state
-        # Note: These are not necessarily contiguous in time across the whole dataset,
-        # but locally they are.
-        # Ideally, we pick a specific historical occurrence of this state.
+        # Identify runs of this state in historical data
+        is_state = (self.data['State_Idx'] == state)
+        # Create groups for contiguous regions
+        # Shift compare to find boundaries
+        groups = (is_state != is_state.shift()).cumsum()
 
-        state_instances = self.data[self.data['State_Idx'] == state]
-
-        if len(state_instances) == 0:
+        # Extract runs where state matches
+        # Filter first to only get rows of this state
+        state_data = self.data[is_state]
+        if state_data.empty:
             return np.zeros(n_days)
 
-        # If we just grab all returns, they are disjoint.
-        # Better: Pick a random start index in the filtered array?
-        # The user audit suggested: "Sample a STARTING point, then take n_days CONSECUTIVE returns"
-        # from the filtered array. This implies ignoring the disjoint nature, which is a common approx.
-        # Let's implement that for now.
+        # Group filtered data by 'block' (already computed in _process_data)
+        # We can use the 'block' column which is unique for each contiguous run
+        runs = [group['Log_Ret'].values for _, group in state_data.groupby('block')]
 
-        state_rets = state_instances['Log_Ret'].values
-        if len(state_rets) < n_days:
-            # Not enough history, wrap around or repeat
-            return np.resize(state_rets, n_days)
+        # Filter for runs long enough? Or stitch?
+        # Ideally pick a run that is at least n_days
+        valid_runs = [r for r in runs if len(r) >= n_days]
 
-        start_idx = np.random.randint(0, len(state_rets) - n_days + 1)
-        return state_rets[start_idx : start_idx + n_days]
+        if valid_runs:
+            chosen_run = valid_runs[np.random.randint(len(valid_runs))]
+            start_idx = np.random.randint(0, len(chosen_run) - n_days + 1)
+            return chosen_run[start_idx : start_idx + n_days]
+        else:
+            # Fallback: Pick longest run and tile it
+            if not runs:
+                return np.zeros(n_days)
+            longest_run = max(runs, key=len)
+            # Tile until we have enough
+            tiled = np.tile(longest_run, int(np.ceil(n_days / len(longest_run))) + 1)
+            return tiled[:n_days]
 
     def regime_fatigue_score(self, state, days_in_state):
-        """
-        Calculates a 0-1 score indicating how 'tired' the regime is.
-        Score = CDF(duration). High score = High probability of exit.
-        """
+        """Calculates probability of exit (CDF)."""
         params = self.duration_params.get(state)
         if not params:
             return 0.5
-
         if params['dist'] == 'gamma':
             a, loc, scale = params['params']
             return gamma.cdf(days_in_state, a, loc=loc, scale=scale)
         else:
-            # Exponential is memoryless, so "fatigue" is constant/undefined?
-            # Or we can interpret as CDF too.
-            # But technically hazard rate is constant.
-            # Let's return CDF for consistency (probability we shouldn't have lasted this long)
             loc, scale = params['params']
             return expon.cdf(days_in_state, loc=loc, scale=scale)
 
+    def get_position_size(self, current_state, days_in_state, base_size=1.0):
+        """
+        Returns position multiplier based on regime fatigue and type.
+        """
+        fatigue = self.regime_fatigue_score(current_state, days_in_state)
+
+        # State 0 (Crash) and 1 (Bear) are risky
+        if current_state in [0, 1]:
+            # In risky regimes, we want to stay defensive until fatigue is VERY high?
+            # Or: Fatigue means "likely to end soon".
+            # If Crash is likely to end, maybe scale up?
+            # User logic: "In risky regimes, fatigue means might get WORSE before better -> multiplier low"
+            # Actually user said: "0.3 + (1-fatigue)*0.3" -> If fatigue is 0, mult=0.6. If fatigue is 1, mult=0.3.
+            # This implies high fatigue = lower position. "Don't catch a falling knife that's about to turn"?
+            # Or maybe "Volatility clusters, so late in regime = peak danger"?
+            # Let's stick to user's formula.
+            multiplier = 0.3 + (1 - fatigue) * 0.3
+        else:
+            # Normal regimes (Bull/Rally)
+            # High fatigue = likely to end -> reduce size
+            multiplier = 0.5 + (1 - fatigue) * 0.5
+
+        return base_size * multiplier
+
+    def validate_model(self, simulated_paths):
+        """
+        Validates the model by comparing simulated vs empirical statistics.
+        Returns a dictionary of validation metrics.
+        """
+        report = {}
+
+        # 1. Regime Duration KS Test
+        # Extract simulated durations
+        # This is hard because simulated_paths are prices. We need states.
+        # But run_simulation doesn't return states.
+        # Ideally, we should refactor run_simulation to return (paths, states).
+        # For now, we can skip this or approximate.
+        # Let's add a note that full validation requires state history.
+        report['duration_ks_test'] = "Requires state history (not returned by run_simulation)"
+
+        # 2. Volatility Autocorrelation (Clustering)
+        # Compare ACF of squared returns
+        real_rets = self.data['Log_Ret'].dropna().values
+        real_vol_proxy = real_rets ** 2
+
+        # Sim returns
+        sim_rets = np.diff(np.log(simulated_paths), axis=1)
+        sim_vol_proxy = sim_rets ** 2
+
+        # Compute ACF lag 1
+        def acf1(x):
+            return np.corrcoef(x[:-1], x[1:])[0, 1] if len(x) > 1 else 0
+
+        real_acf = acf1(real_vol_proxy)
+        sim_acfs = [acf1(path) for path in sim_vol_proxy]
+        avg_sim_acf = np.mean(sim_acfs)
+
+        report['real_vol_acf_lag1'] = real_acf
+        report['sim_vol_acf_lag1'] = avg_sim_acf
+        report['vol_clustering_error'] = abs(real_acf - avg_sim_acf)
+
+        return report
+
     def run_simulation(self, days=126, simulations=1000):
-        """Runs Semi-Markov Monte Carlo simulation with residual duration logic."""
+        """Runs Semi-Markov Monte Carlo simulation."""
+        # ... (same as before) ...
         print(f"🎲 Simulating {days} days x {simulations} paths (Semi-Markov)...")
 
         last_price = self.data['Close'].iloc[-1]
 
-        # Determine current state context
         last_block_idx = self.data['block'].iloc[-1]
         current_state_duration = len(self.data[self.data['block'] == last_block_idx])
         current_state = int(self.data['State_Idx'].iloc[-1])
@@ -232,27 +299,22 @@ class SemiMarkovModel:
         sim_paths = np.zeros((simulations, days))
 
         for sim in range(simulations):
-            # 1. Determine remaining duration in CURRENT state
             remaining_duration = self.sample_residual_duration(current_state, current_state_duration)
 
             curr_s = current_state
             curr_t = 0
             log_rets = []
 
-            # First block (current state)
             first_step_dur = min(remaining_duration, days)
             r = self.sample_regime_returns(curr_s, first_step_dur)
             log_rets.extend(r)
             curr_t += first_step_dur
 
-            # Transition from current state
             if curr_t < days:
-                # Transition logic
                 probs = self.transition_matrix.loc[curr_s].values
                 probs = probs / probs.sum()
                 curr_s = np.random.choice(range(self.n_states), p=probs)
 
-            # Subsequent blocks
             while curr_t < days:
                 dur = self.sample_duration(curr_s)
                 step_dur = min(dur, days - curr_t)
@@ -264,29 +326,26 @@ class SemiMarkovModel:
                 if curr_t >= days:
                     break
 
-                # Transition
                 probs = self.transition_matrix.loc[curr_s].values
                 probs = probs / probs.sum()
                 curr_s = np.random.choice(range(self.n_states), p=probs)
 
-            # Convert to price path
             cum_rets = np.cumsum(log_rets[:days])
             sim_paths[sim, :] = last_price * np.exp(cum_rets)
 
         return sim_paths
 
 if __name__ == "__main__":
-    # Quick sanity check
     model = SemiMarkovModel("SPY")
     model._process_data()
     model.fit_distributions()
 
-    # Check fatigue
-    print(f"Fatigue for State 0 at 5 days: {model.regime_fatigue_score(0, 5):.2f}")
-    print(f"Fatigue for State 0 at 50 days: {model.regime_fatigue_score(0, 50):.2f}")
+    print(f"State 0 (Highest Risk) Mapped to: {model.state_map[0]}")
 
     paths = model.run_simulation(days=100, simulations=100)
-    print(f"Generated {paths.shape} paths.")
+
+    val = model.validate_model(paths)
+    print("Validation:", val)
 
     plt.plot(paths.T, alpha=0.1, color='cyan')
     plt.title("Semi-Markov Paths")
