@@ -1,7 +1,7 @@
 # 📋 Quant Platform Backlog
 
 > **Status:** Active  
-> **Last Updated:** 2026-03-29  
+> **Last Updated:** 2026-03-30  
 > **Purpose:** Track critical engineering tasks for the Regime Risk Platform.
 
 ---
@@ -30,15 +30,16 @@
 -   **Path Extrema Quantiles:** Calibrate targets using the distribution of Max/Min excursions over horizon $H$.
     -   $M^{up}_t = \max_{1\le k \le H} \ln(P_{t+k}/P_t)$
     -   $M^{down}_t = \min_{1\le k \le H} \ln(P_{t+k}/P_t)$
-    -   *Correction:* Must use forward-looking window loop.
+    -   *Correction:* Must use forward-looking window loop (non-overlapping windows preferred).
 -   **State-Dependent Targets:** Targets must be conditional on current Regime/Vol bucket.
+-   **First-Passage Ordering:** Replace "Edge" with $P(\tau_{up} < \tau_{down})$ vs $P(\tau_{down} < \tau_{up})$.
 
 ### P0-C: GARCH Reliability & Truthfulness
 **Problem:** Silent fallback obscures model failure.
 **FIX STRATEGY:**
 -   **Status Class:** `GARCHStatus` (status, confidence, persistence, fallback_reason).
 -   **Fallback Hierarchy:** 1. EGARCH/GARCH -> 2. EWMA ($\lambda=0.94$) -> 3. Rolling Realized Vol -> 4. Long-term Average.
--   **Automatic Selection:** Score models by OOS Volatility Forecast MSE.
+-   **Automatic Selection:** Score models by OOS Volatility Forecast MSE (Rolling Window).
 -   **Roadmap:** FHS (Mode C) allows GARCH to actually drive simulation, not just display a number.
 
 ### P0-D: Simulation Calibration Diagnostic (The "Blame Table")
@@ -51,6 +52,7 @@
 -   **Regime Fidelity:** Compare Regime Frequency (Occupancy) and Conditional Means/Vols (Hist vs Sim).
 -   **Coverage Backtests:** Kupiec (unconditional) + **Christoffersen (independence)** tests for VaR validity.
 -   **Cross-Correlation:** Check if correlations go to 1 in crisis (Hist vs Sim).
+-   **Extreme Event Clustering:** $P(|r_t|>\theta \mid |r_{t-1}|>\theta)$ for $\theta \in \{95, 99\}$.
 
 ---
 
@@ -65,22 +67,24 @@
     -   `production`: 50,000 sims, block_len=geometric, parallel=True
 -   **RNG Safety:** Use `np.random.SeedSequence(seed).spawn(n_workers)`.
 
-### 2. Regime Definition Stability
+### 2. Regime Definition Stability & Semantics
 **Problem:** Arbitrary boundaries (3 vs 4 regimes).
 **Fix:** Test sensitivity to `n_regimes` and stability of boundaries over time.
 **New:** Test parameter stability (Rolling Beta) within regimes.
+**New:** Regime Semantic Validation (Centroid Drift, Scarcity check, Interpretability).
 
 ---
 
 ## 🟡 P1: Model Confidence & Institutional Safety
 
-### 1. Data Integrity & Scalability (New)
+### 1. Data Integrity, Scalability & Reproducibility
 **Problem:** Bad data kills good models.
 **Fix:**
 -   **Corporate Actions:** Verify split adjustments.
 -   **Outlier Filters:** Policy for bad ticks.
 -   **Consistency Check:** Ensure log-returns used consistently across all modules.
 -   **Survivorship Bias:** Warning flag for universe selection.
+-   **Experiment Tracking:** Hash(Data + Code + Config) saved with results for exact reproducibility.
 
 ### 2. Institutional Pitfalls Defense
 -   **Leakage Guard:** Refit Scaler/GMM/Beta on *Train* split only.
@@ -139,6 +143,10 @@ def simulate(self, use_sparse_output=True):
 **Problem:** `run()` crashes if `ingest_data()` isn't called.
 **Fix:** Add state guard `if self.data is None: self.ingest_data()`.
 
+### 5. Mode Convergence Test (New)
+**Problem:** Triple Mode explosion.
+**Fix:** Verify Mode A/B/C converge on central usage at large N, diverge in tails.
+
 ---
 
 ## 🟢 P3: Features & UX
@@ -161,6 +169,7 @@ def prepare_coupled_pairs(self):
 
 def get_geometric_block_length(self, mean_length=20):
     # Stationary Bootstrap: Random block length
+    # Tuning: Match ACF(r^2) decay profile
     return np.random.geometric(1/mean_length)
 ```
 
