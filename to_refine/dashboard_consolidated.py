@@ -21,12 +21,16 @@ import logging
 from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime, timedelta
 from scipy import stats
+# Import engines - use absolute path based on file location
+import os
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Parent of to_refine/
 
-# Import engines
+# Add project root and to_refine to path
+sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, SCRIPT_DIR)
+
 from regime_engine_v7 import RegimeRiskEngineV7
-
-# Add parent directory to path for imports
-sys.path.insert(0, '..')
 from refinery.semi_markov import SemiMarkovModel
 from signals_factory.signal_vol_compression import VolCompressionSignal
 from signals_factory.aggregator import SignalAggregator

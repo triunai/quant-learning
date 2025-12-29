@@ -4,20 +4,10 @@
 services:
   - type: web
     name: quant-dashboard
-    env: python
-    plan: starter  # Upgrade to 'standard' if you run out of memory
-    region: singapore  # Closest to you
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: |
-      streamlit run to_refine/dashboard_consolidated.py \
-        --server.port $PORT \
-        --server.address 0.0.0.0 \
-        --server.headless true \
-        --browser.gatherUsageStats false
+    runtime: python
+    plan: standard  # starter might OOM on heavier sims
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd to_refine && streamlit run dashboard_consolidated.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-    healthCheckPath: /
-    autoDeploy: true  # Auto-deploy on git push

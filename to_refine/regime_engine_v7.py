@@ -10,7 +10,11 @@ import os
 import importlib.util
 
 # Add battle-tested to path for import
-BATTLE_TESTED_PATH = os.path.join(os.path.dirname(__file__), '..', 'battle-tested')
+# Add battle-tested to path for import
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+BATTLE_TESTED_PATH = os.path.join(PROJECT_ROOT, 'battle-tested')
+
 if BATTLE_TESTED_PATH not in sys.path:
     sys.path.insert(0, BATTLE_TESTED_PATH)
 
