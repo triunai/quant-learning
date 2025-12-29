@@ -1,26 +1,27 @@
 # 📋 Quant Platform Backlog
 
 > **Status:** Active  
-> **Last Updated:** 2025-12-29  
+> **Last Updated:** 2026-03-29  
 > **Purpose:** Track critical engineering tasks for the Regime Risk Platform.
 
 ---
 
 ## 🔴 P0: Critical Fidelity Fixes (Scientific Sanity Check)
 
-### P0-A: Simulation Realism (The "Invariants" Fix)
-**Problem:** Simulation fails to reproduce stylized facts: Heavy Tails, Volatility Clustering, and Crisis Feedback.
+### P0-A: Simulation Realism (The "Invariants" & "Triple Mode" Fix)
+**Problem:** Simulation fails to reproduce stylized facts: Heavy Tails, Volatility Clustering, Leverage Effect, and Crisis Feedback.
 **FIX STRATEGY:**
-1.  **Coupled Pair Sampling:** Sample `(market_ret, residual)` time-ordered vectors to preserve joint distribution.
-2.  **Stationary Block Bootstrap:** Random block lengths (Geometric distribution) to preserve clustering without periodic artifacts.
-    *   *Tuning:* Select mean block length $L$ by matching ACF($r^2$) decay.
+1.  **Coupled Pair Sampling:** Sample `(market_ret, residual)` time-ordered vectors to preserve joint distribution (Panic Coupling).
+2.  **Stationary Block Bootstrap (Mode B):** Random block lengths (Geometric distribution) to preserve clustering without periodic artifacts.
+    *   *Tuning:* Minimize distance between $\text{ACF}^{hist}(r^2)$ and $\text{ACF}^{sim}(r^2)$ at lags 1,5,10,20.
 3.  **Mode Separation (Avoid Double Counting):**
-    *   *Mode A (Structural):* Semi-Markov with Regime-Dependent Beta (Beta must spike in crisis).
+    *   *Mode A (Structural):* Semi-Markov with Regime-Dependent Beta.
+        *   **Endogenous Feedback:** Crisis probability $P(S_{t+1}=\text{Crisis})$ must depend on market shock ($r_{mkt} < q_{05}$) or VIX level.
     *   *Mode B (Benchmark):* Pure Stationary Bootstrap of squared/paired vectors (The "Truth Serum").
-    *   *Mode C (Vol-Adaptive):* Filtered Historical Simulation (FHS) using GARCH/EGARCH to filter vol, bootstrap residuals, and simulate forward.
+    *   *Mode C (Vol-Adaptive):* **Filtered Historical Simulation (FHS)** using EGARCH/GJR-GARCH to filter vol $\to$ bootstrap standardized residuals $\to$ simulate forward.
 **Success Criteria:**
-*   **Tail Dependence:** Lower vs Upper dependence matches history ±10%.
-*   **Clustering:** Time-series ACF($r^2$) matches history at lags 1, 5, 10.
+*   **Tail Dependence:** Matches history ±10% at q01/q05/q10 (with Bootstrap CI).
+*   **Clustering:** Time-series ACF($r^2$) matches history.
 *   **Leverage Effect:** Correlation($r_t, \sigma^2_{t+1}$) is negative.
 
 ### P0-B: Target Realism (First-Passage Calibration)
@@ -36,8 +37,9 @@
 **Problem:** Silent fallback obscures model failure.
 **FIX STRATEGY:**
 -   **Status Class:** `GARCHStatus` (status, confidence, persistence, fallback_reason).
--   **Fallback Hierarchy:** 1. GARCH(1,1) -> 2. EWMA ($\lambda=0.94$) -> 3. Rolling Realized Vol -> 4. Long-term Average.
--   **Roadmap:** Adopt **Filtered Historical Simulation (FHS)** to allow GARCH to influence simulation clustering.
+-   **Fallback Hierarchy:** 1. EGARCH/GARCH -> 2. EWMA ($\lambda=0.94$) -> 3. Rolling Realized Vol -> 4. Long-term Average.
+-   **Automatic Selection:** Score models by OOS Volatility Forecast MSE.
+-   **Roadmap:** FHS (Mode C) allows GARCH to actually drive simulation, not just display a number.
 
 ### P0-D: Simulation Calibration Diagnostic (The "Blame Table")
 **Problem:** Mismatches happen; root cause is opaque.
@@ -45,8 +47,10 @@
 -   **Unconditional:** Mean, Std, Skew, Excess Kurtosis.
 -   **Clustering:** Time-series ACF($r^2$) (computed per path, then averaged).
 -   **Leverage Effect:** Corr($r_t, r_{t+1}^2$).
--   **Tail Dependence:** Lower vs Upper conditional probabilities.
+-   **Tail Dependence:** Lower ($P(Asset < q05 | Mkt < q05)$) vs Upper conditional probabilities.
 -   **Regime Fidelity:** Compare Regime Frequency (Occupancy) and Conditional Means/Vols (Hist vs Sim).
+-   **Coverage Backtests:** Kupiec (unconditional) + **Christoffersen (independence)** tests for VaR validity.
+-   **Cross-Correlation:** Check if correlations go to 1 in crisis (Hist vs Sim).
 
 ---
 
@@ -64,17 +68,31 @@
 ### 2. Regime Definition Stability
 **Problem:** Arbitrary boundaries (3 vs 4 regimes).
 **Fix:** Test sensitivity to `n_regimes` and stability of boundaries over time.
+**New:** Test parameter stability (Rolling Beta) within regimes.
 
 ---
 
 ## 🟡 P1: Model Confidence & Institutional Safety
 
-### 1. Institutional Pitfalls Defense
+### 1. Data Integrity & Scalability (New)
+**Problem:** Bad data kills good models.
+**Fix:**
+-   **Corporate Actions:** Verify split adjustments.
+-   **Outlier Filters:** Policy for bad ticks.
+-   **Consistency Check:** Ensure log-returns used consistently across all modules.
+-   **Survivorship Bias:** Warning flag for universe selection.
+
+### 2. Institutional Pitfalls Defense
 -   **Leakage Guard:** Refit Scaler/GMM/Beta on *Train* split only.
 -   **Beta Instability:** Beta assumes constant; consider Regime-Specific Beta or Vol-dependent Beta.
 -   **Scarcity Risk:** Fallback to "Same Stress Quadrant" rather than just "Nearest Vol".
+-   **Parameter Uncertainty:** Bootstrap parameters (Posterior sampling) to reflect estimation risk in tails.
 
-### 2. Walk-Forward Stability Check (The "Leakage" Fix)
+### 3. Model Risk Quantification (New)
+**Problem:** Unknown sources of error.
+**Fix:** Decompose variance contribution: Parameter Estimation vs Model Specification vs Data Quality.
+
+### 4. Walk-Forward Stability Check (The "Leakage" Fix)
 **Reference:** *Critical Bug in Walk-Forward Validation*
 **Problem:** `walk_forward_validation` incorrectly uses `current` price for historical targets (Look-ahead bias).
 **Fix:**
@@ -85,10 +103,10 @@ up_pct_move = (self.target_up / self.last_price) - 1
 ```
 **Enhancement:** Implement rolling window GMM refit to test regime stability out-of-sample.
 
-### 3. Trust Score Metric (0-100)
+### 5. Trust Score Metric (0-100)
 -   Aggregate fidelity score (Stats 40%, Stability 30%, OOS 20%, Context 10%).
 
-### 4. Defensive Kelly Logic ("Kelly Betrayal")
+### 6. Defensive Kelly Logic ("Kelly Betrayal")
 -   Scale position size by `regime_confidence` (GMM posterior).
 -   Hard penalty if VIX > 30.
 
@@ -102,9 +120,10 @@ up_pct_move = (self.target_up / self.last_price) - 1
 ```python
 def simulate(self, use_sparse_output=True):
     # Track hitting times online, do not store full paths
+    # Accumulate MaxDD, Worst Drawdown, Hit Times
     up_hit_times = np.full(self.simulations, np.inf)
     # ... update in loop ...
-    return {'up_hit_times': up_hit_times, 'final_prices': ...}
+    return {'up_hit_times': up_hit_times, 'max_drawdowns': ...}
 ```
 
 ### 2. Parallel Simulation
@@ -170,4 +189,19 @@ def compute_regime_aware_kelly(self, paths, current_regime):
     if regime_conf < 0.7: kelly *= regime_conf
     if self.vix > 30: kelly *= 0.5
     return kelly
+```
+
+### 5. Success Metrics Benchmark
+```python
+class SuccessMetrics:
+    @staticmethod
+    def simulation_realism_success(sim_stats, hist_stats):
+        return {
+            'kurtosis_match': abs(sim_stats['kurtosis'] - hist_stats['kurtosis']) < 1.0,
+            'acf_match': all(abs(sim_stats['acf'][lag] - hist_stats['acf'][lag]) < 0.05 
+                           for lag in [1, 5, 10]),
+            'tail_dependence_match': abs(sim_stats['lower_tail_dep'] - 
+                                        hist_stats['lower_tail_dep']) < 0.10,
+            'leverage_effect_present': sim_stats['leverage_corr'] < -0.05
+        }
 ```
