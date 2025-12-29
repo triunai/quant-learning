@@ -38,6 +38,7 @@ from regime_engine_v7 import RegimeRiskEngineV7
 from refinery.semi_markov import SemiMarkovModel
 from signals_factory.signal_vol_compression import VolCompressionSignal
 from signals_factory.aggregator import SignalAggregator
+from stationary_bootstrap import StationaryBootstrap, BootstrapConfig
 
 # =============================================================================
 # LOGGING CAPTURE UTILITY
@@ -109,10 +110,12 @@ enable_vix = st.sidebar.checkbox("Enable VIX Filter", value=True)
 
 st.sidebar.divider()
 st.sidebar.subheader("🔧 Module Selection")
-run_v7 = st.sidebar.checkbox("Run v7.0 Regime Engine", value=True)
+run_mode_b = st.sidebar.checkbox("🎯 Run Mode B (Stationary Bootstrap)", value=True, help="Ground truth benchmark - block samples historical data with no model assumptions.")
+mode_b_config = st.sidebar.selectbox("Mode B Config", ["debug", "fast", "production"], index=1, help="debug=1k sims, fast=5k sims, production=50k sims") if run_mode_b else "fast"
+run_v7 = st.sidebar.checkbox("Run v7.0 Regime Engine (Mode A)", value=False)
 run_full_calibration = st.sidebar.checkbox("⚡ Full Calibration Suite", value=False, help="Runs multi-threshold calibration, walk-forward validation, and bucket asymmetry diagnostics. Takes longer but provides rigorous validation.")
-run_semi_markov = st.sidebar.checkbox("Run Semi-Markov Model", value=True)
-run_signals = st.sidebar.checkbox("Run Signals Factory", value=True)
+run_semi_markov = st.sidebar.checkbox("Run Semi-Markov Model", value=False)
+run_signals = st.sidebar.checkbox("Run Signals Factory", value=False)
 
 st.sidebar.divider()
 run_btn = st.sidebar.button("🚀 RUN ALL SELECTED", type="primary")
@@ -508,6 +511,106 @@ def run_signals_factory(ticker, log: LogCapture):
         return None, None
 
 
+def run_mode_b_bootstrap(ticker, market_ticker, days_ahead, config_mode, log: LogCapture):
+    """Run Mode B: Stationary Bootstrap (Ground Truth Benchmark)."""
+    log.section("MODE B: STATIONARY BOOTSTRAP (GROUND TRUTH)")
+    log.log(f"Ticker: {ticker} | Benchmark: {market_ticker}")
+    log.log(f"Config: {config_mode} | Days: {days_ahead}")
+    
+    try:
+        # Create config
+        config = BootstrapConfig(mode=config_mode, seed=42)
+        log.log(f"Simulations: {config.simulations:,}")
+        log.log(f"Mean block length: {config.mean_block_length}")
+        
+        log.log("Initializing StationaryBootstrap engine...")
+        engine = StationaryBootstrap(
+            ticker=ticker,
+            market_ticker=market_ticker,
+            days_ahead=days_ahead,
+            config=config,
+        )
+        
+        log.log("Ingesting market data...")
+        engine.ingest_data()
+        log.log(f"Last price: ${engine.last_price:.2f}", "SUCCESS")
+        log.log(f"Target Up: ${engine.target_up:.0f} (+{((engine.target_up/engine.last_price)-1)*100:.0f}%)")
+        log.log(f"Target Down: ${engine.target_down:.0f} ({((engine.target_down/engine.last_price)-1)*100:.0f}%)")
+        log.log(f"Beta: {engine.beta:.2f} | Alpha (ann): {engine.alpha * 252:+.1%}")
+        log.log(f"Realized Vol: {engine.realized_vol:.1%}")
+        
+        log.log(f"Running {config.simulations:,} simulation paths...")
+        paths = engine.simulate()
+        log.log(f"Simulation complete: {paths.shape}", "SUCCESS")
+        
+        # Compute diagnostics
+        log.section("DIAGNOSTICS (Sim vs Historical)")
+        diagnostics = engine.compute_diagnostics(paths)
+        
+        gatekeepers = [d for d in diagnostics if d.is_gatekeeper]
+        info_metrics = [d for d in diagnostics if not d.is_gatekeeper]
+        
+        log.log("GATEKEEPER METRICS (Must Pass):", "INFO")
+        for d in gatekeepers:
+            status = "✅" if d.passed else "❌"
+            log.log(f"  {status} {d.metric}: Sim={d.sim_value:.4f}, Hist={d.hist_value:.4f}", 
+                   "SUCCESS" if d.passed else "ERROR")
+        
+        log.log("DIAGNOSTIC METRICS (Info Only):", "INFO")
+        for d in info_metrics:
+            status = "✅" if d.passed else "⚠️"
+            log.log(f"  {status} {d.metric}: Sim={d.sim_value:.4f}, Hist={d.hist_value:.4f}", "DEBUG")
+        
+        all_gates_passed = all(d.passed for d in gatekeepers)
+        log.log(f"GATEKEEPER STATUS: {'ALL PASSED' if all_gates_passed else 'SOME FAILED'}", 
+               "SUCCESS" if all_gates_passed else "ERROR")
+        
+        # First-passage analysis
+        log.section("FIRST-PASSAGE ANALYSIS")
+        fpt = engine.analyze_first_passage(paths)
+        log.log(f"P(Up First): {fpt['prob_up_first']:.1%}")
+        log.log(f"P(Down First): {fpt['prob_down_first']:.1%}")
+        log.log(f"P(Neither): {fpt['prob_neither']:.1%}")
+        
+        if not np.isnan(fpt['mean_tau_up']):
+            log.log(f"Mean Time to Up: {fpt['mean_tau_up']:.1f} days")
+        if not np.isnan(fpt['mean_tau_down']):
+            log.log(f"Mean Time to Down: {fpt['mean_tau_down']:.1f} days")
+        
+        # Historical validation
+        hist_rates = engine.compute_historical_hit_rates()
+        log.log(f"Historical Up Hit Rate: {hist_rates['hist_up_hit']:.1%} ({hist_rates['n_windows']} windows)")
+        log.log(f"Historical Down Hit Rate: {hist_rates['hist_down_hit']:.1%}")
+        
+        # Risk metrics
+        log.section("RISK METRICS")
+        risk = engine.compute_risk_metrics(paths)
+        log.log(f"VaR(95): {risk['var_95']*100:+.1f}%")
+        log.log(f"CVaR(95): {risk['cvar_95']*100:+.1f}%")
+        log.log(f"P(MaxDD > 20%): {risk['prob_dd_20']:.1%}")
+        log.log(f"P(MaxDD > 30%): {risk['prob_dd_30']:.1%}")
+        log.log(f"Win Rate: {risk['win_rate']:.1%}")
+        log.log(f"Kelly Fraction: {risk['kelly_fraction']:.0%}")
+        
+        # Build results
+        results = {
+            'paths': paths,
+            'diagnostics': diagnostics,
+            'first_passage': fpt,
+            'risk': risk,
+            'historical_validation': hist_rates,
+            'all_gates_passed': all_gates_passed,
+        }
+        
+        return engine, results
+        
+    except Exception as e:
+        log.log(f"Mode B failed: {str(e)}", "ERROR")
+        import traceback
+        log.log(traceback.format_exc(), "ERROR")
+        return None, None
+
+
 # =============================================================================
 # MAIN UI
 # =============================================================================
@@ -537,6 +640,8 @@ if run_btn:
     v7_engine = None
     v7_results = None
     v7_signal = None
+    mode_b_engine = None
+    mode_b_results = None
     sm_model = None
     sm_paths = None
     sm_validation = None
@@ -544,8 +649,36 @@ if run_btn:
     sf_signal = None
     sf_agg = None
     
-    total_steps = sum([run_v7, run_semi_markov, run_signals])
+    total_steps = sum([run_mode_b, run_v7, run_semi_markov, run_signals])
     current_step = 0
+    
+    # === Run Mode B (Ground Truth) ===
+    if run_mode_b:
+        status_text.write("Running Mode B: Stationary Bootstrap (Ground Truth)...")
+        mode_b_engine, mode_b_results = run_mode_b_bootstrap(
+            ticker, market_ticker, days_ahead, mode_b_config, log
+        )
+        if mode_b_engine and mode_b_results:
+            all_results["modules"]["mode_b"] = {
+                "price": mode_b_engine.last_price,
+                "beta": mode_b_engine.beta,
+                "alpha_ann": mode_b_engine.alpha * 252,
+                "realized_vol": mode_b_engine.realized_vol,
+                "all_gates_passed": mode_b_results['all_gates_passed'],
+                "first_passage": {
+                    "prob_up_first": mode_b_results['first_passage']['prob_up_first'],
+                    "prob_down_first": mode_b_results['first_passage']['prob_down_first'],
+                    "prob_neither": mode_b_results['first_passage']['prob_neither'],
+                },
+                "risk": {
+                    "var_95": mode_b_results['risk']['var_95'],
+                    "cvar_95": mode_b_results['risk']['cvar_95'],
+                    "kelly_fraction": mode_b_results['risk']['kelly_fraction'],
+                },
+                "historical_validation": mode_b_results['historical_validation'],
+            }
+        current_step += 1
+        progress_bar.progress(current_step / total_steps if total_steps > 0 else 1.0)
     
     # === Run V7.0 ===
     if run_v7:
@@ -632,52 +765,233 @@ if run_btn:
     
     st.title(f"🦅 {ticker} - Consolidated Analysis")
     
-    # Header metrics
+    # Header metrics - prioritize Mode B as ground truth
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        if v7_engine:
+        if mode_b_engine:
+            st.metric("Price", f"${mode_b_engine.last_price:.2f}")
+        elif v7_engine:
             st.metric("Price", f"${v7_engine.last_price:.2f}")
         else:
             st.metric("Price", "N/A")
     
     with col2:
-        if v7_engine:
+        if mode_b_results:
+            status = "✅ PASS" if mode_b_results['all_gates_passed'] else "❌ FAIL"
+            st.metric("Mode B Gates", status)
+        elif v7_engine:
             regime_name = v7_engine.regime_names.get(v7_engine.current_regime, "Unknown")
             st.metric("V7 Regime", regime_name)
         else:
-            st.metric("V7 Regime", "N/A")
+            st.metric("Mode B Gates", "N/A")
     
     with col3:
-        if sm_state_info:
+        if mode_b_results:
+            fpt = mode_b_results['first_passage']
+            if fpt['prob_up_first'] > fpt['prob_down_first']:
+                edge = f"↑ {fpt['prob_up_first']:.0%}"
+            else:
+                edge = f"↓ {fpt['prob_down_first']:.0%}"
+            st.metric("First-Passage Edge", edge)
+        elif sm_state_info:
             st.metric("Semi-Markov State", sm_state_info['state_name'])
         else:
-            st.metric("Semi-Markov State", "N/A")
+            st.metric("Edge", "N/A")
     
     with col4:
-        if v7_signal:
+        if mode_b_results:
+            kelly = mode_b_results['risk']['kelly_fraction']
+            st.metric("Kelly", f"{kelly:.0%}")
+        elif v7_signal:
             st.metric("Signal", f"{v7_signal['signal']} ({v7_signal['confidence']}%)")
         else:
-            st.metric("Signal", "N/A")
+            st.metric("Kelly", "N/A")
     
     with col5:
-        if sf_signal:
+        if mode_b_engine:
+            st.metric("Beta", f"{mode_b_engine.beta:.2f}")
+        elif sf_signal:
             st.metric("Vol Compression", f"{sf_signal.confidence:.0f}/100")
         else:
-            st.metric("Vol Compression", "N/A")
+            st.metric("Beta", "N/A")
     
     st.divider()
     
     # ==========================================================================
     # TABS
     # ==========================================================================
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Visuals", 
+    tab_mode_b, tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🎯 Mode B (Ground Truth)",
+        "📊 Mode A (V7.0)", 
         "🧬 Semi-Markov", 
         "📡 Signals", 
         "📋 Terminal Log", 
         "💾 Export JSON"
     ])
+    
+    # --- Tab Mode B: Ground Truth Benchmark ---
+    with tab_mode_b:
+        if mode_b_results and mode_b_engine:
+            st.subheader("🎯 Mode B: Stationary Bootstrap (Ground Truth)")
+            st.caption("Block samples historical data with geometric random block lengths. No model assumptions.")
+            
+            # Gate status banner
+            if mode_b_results['all_gates_passed']:
+                st.success("✅ ALL GATEKEEPER METRICS PASSED - Simulation is trustworthy")
+            else:
+                st.error("❌ SOME GATEKEEPER METRICS FAILED - Review diagnostics below")
+            
+            # Main metrics row
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                st.metric("Beta", f"{mode_b_engine.beta:.2f}")
+                st.metric("Alpha (ann)", f"{mode_b_engine.alpha * 252:+.1%}")
+            with col_b:
+                st.metric("Realized Vol", f"{mode_b_engine.realized_vol:.1%}")
+                st.metric("Target Up", f"${mode_b_engine.target_up:.0f}")
+            with col_c:
+                st.metric("VaR(95)", f"{mode_b_results['risk']['var_95']*100:+.1f}%")
+                st.metric("CVaR(95)", f"{mode_b_results['risk']['cvar_95']*100:+.1f}%")
+            with col_d:
+                st.metric("Win Rate", f"{mode_b_results['risk']['win_rate']:.1%}")
+                st.metric("Kelly", f"{mode_b_results['risk']['kelly_fraction']:.0%}")
+            
+            st.divider()
+            
+            # Diagnostics Table
+            st.markdown("### 🔬 Diagnostic Metrics")
+            
+            diag_data = []
+            for d in mode_b_results['diagnostics']:
+                status = "✅ PASS" if d.passed else "❌ FAIL"
+                gate = "🚨 GATEKEEPER" if d.is_gatekeeper else "ℹ️ Info"
+                diag_data.append({
+                    "Metric": d.metric,
+                    "Simulated": f"{d.sim_value:.4f}",
+                    "Historical": f"{d.hist_value:.4f}",
+                    "Threshold": f"±{d.threshold:.4f}",
+                    "Status": status,
+                    "Type": gate,
+                })
+            st.dataframe(pd.DataFrame(diag_data), use_container_width=True)
+            
+            st.divider()
+            
+            # First-Passage Analysis
+            st.markdown("### 🎲 First-Passage Analysis")
+            fpt = mode_b_results['first_passage']
+            hist_val = mode_b_results['historical_validation']
+            
+            col_fp1, col_fp2, col_fp3 = st.columns(3)
+            with col_fp1:
+                st.markdown("**Simulated Probabilities**")
+                st.metric("P(Up First)", f"{fpt['prob_up_first']:.1%}")
+                st.metric("P(Down First)", f"{fpt['prob_down_first']:.1%}")
+                st.metric("P(Neither)", f"{fpt['prob_neither']:.1%}")
+            with col_fp2:
+                st.markdown("**Hitting Times (Days)**")
+                mean_up = fpt['mean_tau_up'] if not np.isnan(fpt['mean_tau_up']) else "N/A"
+                mean_down = fpt['mean_tau_down'] if not np.isnan(fpt['mean_tau_down']) else "N/A"
+                st.metric("Mean Time to Up", f"{mean_up:.1f}" if isinstance(mean_up, float) else mean_up)
+                st.metric("Mean Time to Down", f"{mean_down:.1f}" if isinstance(mean_down, float) else mean_down)
+            with col_fp3:
+                st.markdown("**Historical Validation**")
+                st.metric("Hist Up Hit Rate", f"{hist_val['hist_up_hit']:.1%}")
+                st.metric("Hist Down Hit Rate", f"{hist_val['hist_down_hit']:.1%}")
+                st.metric("Windows Used", f"{hist_val['n_windows']}")
+            
+            st.divider()
+            
+            # Charts
+            st.markdown("### 📊 Simulation Visualization")
+            
+            paths = mode_b_results['paths']
+            
+            fig = plt.figure(figsize=(18, 10))
+            gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1])
+            
+            # Cone Chart
+            ax1 = fig.add_subplot(gs[0, :])
+            x = np.arange(paths.shape[1])
+            
+            p5 = np.percentile(paths, 5, axis=0)
+            p25 = np.percentile(paths, 25, axis=0)
+            p50 = np.median(paths, axis=0)
+            p75 = np.percentile(paths, 75, axis=0)
+            p95 = np.percentile(paths, 95, axis=0)
+            
+            ax1.fill_between(x, p5, p95, color='cyan', alpha=0.1, label='90%')
+            ax1.fill_between(x, p25, p75, color='cyan', alpha=0.2, label='50%')
+            ax1.plot(x, p50, color='cyan', lw=2.5, label='Median')
+            
+            ax1.axhline(mode_b_engine.target_up, color='lime', ls=':', lw=2, label=f'Up ${mode_b_engine.target_up:.0f}')
+            ax1.axhline(mode_b_engine.target_down, color='red', ls=':', lw=2, label=f'Down ${mode_b_engine.target_down:.0f}')
+            ax1.axhline(mode_b_engine.last_price, color='white', lw=1, alpha=0.5)
+            
+            ax1.set_title(f"{ticker} MODE B | Stationary Bootstrap | Beta={mode_b_engine.beta:.2f}",
+                          fontsize=14, fontweight='bold')
+            ax1.legend(loc='upper left')
+            ax1.grid(alpha=0.2)
+            ax1.set_xlabel("Days")
+            ax1.set_ylabel("Price")
+            
+            # Drawdown Distribution
+            ax2 = fig.add_subplot(gs[1, 0])
+            risk = mode_b_results['risk']
+            sns.histplot(risk['max_drawdowns'] * 100, color='red', ax=ax2, bins=50, alpha=0.7)
+            ax2.axvline(-20, color='orange', ls='--', label='-20%')
+            ax2.axvline(-30, color='red', ls='--', label='-30%')
+            ax2.set_title("Max Drawdown Distribution")
+            ax2.set_xlabel("Drawdown %")
+            ax2.legend()
+            
+            # Final Price Distribution
+            ax3 = fig.add_subplot(gs[1, 1])
+            final = paths[:, -1]
+            sns.histplot(final, color='cyan', ax=ax3, bins=50, alpha=0.7)
+            ax3.axvline(mode_b_engine.last_price, color='white', ls='-', label='Current')
+            ax3.axvline(np.median(final), color='yellow', ls='--', label='Median')
+            ax3.set_title("Final Price Distribution")
+            ax3.legend()
+            
+            # ACF Comparison (Sim vs Historical)
+            ax4 = fig.add_subplot(gs[1, 2])
+            
+            # Compute ACF for both
+            sim_returns = np.diff(np.log(paths), axis=1).flatten()
+            hist_returns = mode_b_engine.data['Log_Ret'].values
+            
+            def compute_acf(returns, max_lag=20):
+                r2 = returns ** 2
+                n = len(r2)
+                mean_r2 = np.mean(r2)
+                var_r2 = np.var(r2)
+                acf = []
+                for lag in range(1, max_lag + 1):
+                    if n > lag and var_r2 > 0:
+                        cov = np.mean((r2[lag:] - mean_r2) * (r2[:-lag] - mean_r2))
+                        acf.append(cov / var_r2)
+                    else:
+                        acf.append(0)
+                return acf
+            
+            lags = list(range(1, 21))
+            hist_acf = compute_acf(hist_returns, 20)
+            sim_acf = compute_acf(sim_returns, 20)
+            
+            ax4.bar(np.array(lags) - 0.2, hist_acf, width=0.4, color='orange', alpha=0.7, label='Historical')
+            ax4.bar(np.array(lags) + 0.2, sim_acf, width=0.4, color='cyan', alpha=0.7, label='Simulated')
+            ax4.set_title("ACF(r²) Comparison - Vol Clustering")
+            ax4.set_xlabel("Lag")
+            ax4.set_ylabel("ACF")
+            ax4.legend()
+            ax4.grid(alpha=0.2)
+            
+            st.pyplot(fig)
+            
+        else:
+            st.info("Enable and run Mode B (Stationary Bootstrap) to see the ground truth benchmark.")
     
     # --- Tab 1: Visuals (V7.0 charts) ---
     with tab1:
