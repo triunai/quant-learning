@@ -1,7 +1,7 @@
 # 🔧 DCA Dashboard - Engineering Planning
 
 > **Status:** Architecture Planning  
-> **Last Updated:** 2024-12-29  
+> **Last Updated:** 2025-12-29  
 > **Purpose:** Document engineering decisions, package choices, pipeline design, and open questions.
 
 ---
