@@ -6,146 +6,168 @@
 
 ---
 
-## 🔴 P0: Critical Fidelity Fixes (Prioritized)
+## 🔴 P0: Critical Fidelity Fixes (Scientific Sanity Check)
 
-### P0-A: Simulation Realism (The "Kurtosis & Clustering" Fix)
-**Problem:** Statistical verification confirms kurtosis mismatch (4.14 vs 8.28) and lack of volatility clustering in simulations.
-**Root Cause 1:** Independent sampling of market/residuals kills tail dependence (panic coupling).
-**Root Cause 2:** Independent daily sampling kills serial correlation.
-**Fix Strategy:**
-1.  **Coupled Pair Sampling:** Sample `(market_ret, residual)` pairs to preserve joint distribution.
-2.  **Stationary Block Bootstrap:** Use random block lengths (Geometric, mean L=10-25) to preserve clustering without periodic artifacts.
+### P0-A: Simulation Realism (The "Invariants" Fix)
+**Problem:** Simulation fails to reproduce stylized facts: Heavy Tails, Volatility Clustering, and Crisis Feedback.
+**FIX STRATEGY:**
+1.  **Coupled Pair Sampling:** Sample `(market_ret, residual)` time-ordered vectors to preserve joint distribution.
+2.  **Stationary Block Bootstrap:** Random block lengths (Geometric distribution) to preserve clustering without periodic artifacts.
+    *   *Tuning:* Select mean block length $L$ by matching ACF($r^2$) decay.
 3.  **Mode Separation (Avoid Double Counting):**
-    *   *Mode A (Regime Model):* Semi-Markov controls switching; use coupled pairs within regimes.
-    *   *Mode B (Historical Dependent):* Pure stationary bootstrap of blocked pairs (disables Semi-Markov) as a model-free benchmark.
+    *   *Mode A (Structural):* Semi-Markov with Regime-Dependent Beta (Beta must spike in crisis).
+    *   *Mode B (Benchmark):* Pure Stationary Bootstrap of squared/paired vectors (The "Truth Serum").
+    *   *Mode C (Vol-Adaptive):* Filtered Historical Simulation (FHS) using GARCH/EGARCH to filter vol, bootstrap residuals, and simulate forward.
 **Success Criteria:**
-*   Excess Kurtosis mismatch < 1.0.
-*   Tail Dependence: $P(|r_{asset}| > q_{95} \mid r_{mkt} < q_{05})$ matches history ±10%.
-*   ACF($r^2$) matches history at lags 1, 5, 10.
+*   **Tail Dependence:** Lower vs Upper dependence matches history ±10%.
+*   **Clustering:** Time-series ACF($r^2$) matches history at lags 1, 5, 10.
+*   **Leverage Effect:** Correlation($r_t, \sigma^2_{t+1}$) is negative.
 
-### P0-B: Target Realism (Auto-Calibration)
-**Problem:** Hardcoded defaults (1.5x) and `sqrt(T)` scaling break for fat-tailed assets.
-**Fix Strategy:**
--   **Empirical Rolling Quantiles:** Use actual historical H-day returns.
-    -   `Target Up = Last Price * exp(Quantile(Roll_Ret_H, 0.95))`
-    -   `Target Down = Last Price * exp(Quantile(Roll_Ret_H, 0.05))`
--   Automatically adapts to asset volatility and non-normal scaling.
-**Success Criteria:** Targets adapt ±20% based on asset vol; Hit rates for "Sim vs Hist" are comparable.
+### P0-B: Target Realism (First-Passage Calibration)
+**Problem:** Calibrating on *terminal* returns mismatches the "hit probability" (Path Extrema) concept.
+**FIX STRATEGY:**
+-   **Path Extrema Quantiles:** Calibrate targets using the distribution of Max/Min excursions over horizon $H$.
+    -   $M^{up}_t = \max_{1\le k \le H} \ln(P_{t+k}/P_t)$
+    -   $M^{down}_t = \min_{1\le k \le H} \ln(P_{t+k}/P_t)$
+    -   *Correction:* Must use forward-looking window loop.
+-   **State-Dependent Targets:** Targets must be conditional on current Regime/Vol bucket.
 
 ### P0-C: GARCH Reliability & Truthfulness
-**Problem:** Silent fallback to realized vol makes validation opaque.
-**Fix Strategy:**
--   **Status Tracking:** `self.garch_status = "OK" | "MISSING" | "FAILED"`.
--   **Convergence Check:** Warn if `garch_vol == realized_vol` (indicates silent fit failure).
--   **Dashboard:** Explicit "ACTIVE" vs "FALLBACK" indicator.
-**Success Criteria:** Dashboard shows status with confidence intervals.
+**Problem:** Silent fallback obscures model failure.
+**FIX STRATEGY:**
+-   **Status Class:** `GARCHStatus` (status, confidence, persistence, fallback_reason).
+-   **Fallback Hierarchy:** 1. GARCH(1,1) -> 2. EWMA ($\lambda=0.94$) -> 3. Rolling Realized Vol -> 4. Long-term Average.
+-   **Roadmap:** Adopt **Filtered Historical Simulation (FHS)** to allow GARCH to influence simulation clustering.
 
-### P0-D: Simulation Calibration Diagnostic
-**Problem:** Mismatches happen, but root cause is opaque.
-**Fix Strategy:**
--   Implement `diagnose_mismatch()` returning a **"Blame Table"**:
-    -   **Unconditional:** Mean, Std, Skew, Excess Kurtosis.
-    -   **Clustering:** ACF($r^2$) at lags 1, 5, 20.
-    -   **Regime:** Occupancy (Hist vs Sim), Conditional Mean/Vol.
-    -   **Tail:** Conditional probability of asset crash given market crash.
+### P0-D: Simulation Calibration Diagnostic (The "Blame Table")
+**Problem:** Mismatches happen; root cause is opaque.
+**FIX STRATEGY:**
+-   **Unconditional:** Mean, Std, Skew, Excess Kurtosis.
+-   **Clustering:** Time-series ACF($r^2$) (computed per path, then averaged).
+-   **Leverage Effect:** Corr($r_t, r_{t+1}^2$).
+-   **Tail Dependence:** Lower vs Upper conditional probabilities.
+-   **Regime Fidelity:** Compare Regime Frequency (Occupancy) and Conditional Means/Vols (Hist vs Sim).
 
 ---
 
 ## 🟡 P0.5: Operational Control & Stability
 
 ### 1. Simulation Config & Reproducibility
-**Problem:** "Production" runs are slow; Parallel RNG can be flawed.
+**Problem:** RNG collisions in parallel runs; slow dev cycles.
 **Fix:**
--   `SimulationConfig` (debug/fast/production).
--   **RNG Safety:** Use `np.random.SeedSequence(seed).spawn(n_workers)` for independent parallel streams.
+-   `SimulationConfig` with modes:
+    -   `debug`: 1000 sims, block_len=1
+    -   `fast`: 5000 sims, block_len=3
+    -   `production`: 50,000 sims, block_len=geometric, parallel=True
+-   **RNG Safety:** Use `np.random.SeedSequence(seed).spawn(n_workers)`.
 
 ### 2. Regime Definition Stability
-**Problem:** Regime counts (3 vs 4) can be arbitrary.
+**Problem:** Arbitrary boundaries (3 vs 4 regimes).
 **Fix:** Test sensitivity to `n_regimes` and stability of boundaries over time.
 
 ---
 
-## 🟡 P1: Robustness & Hygiene
+## 🟡 P1: Model Confidence & Institutional Safety
 
-### 1. API Safety (The "Landmine")
-**Problem:** `run()` crashes if `ingest_data()` isn't called.
-**Fix:** Add state guard `if self.data is None: self.ingest_data()`.
+### 1. Institutional Pitfalls Defense
+-   **Leakage Guard:** Refit Scaler/GMM/Beta on *Train* split only.
+-   **Beta Instability:** Beta assumes constant; consider Regime-Specific Beta or Vol-dependent Beta.
+-   **Scarcity Risk:** Fallback to "Same Stress Quadrant" rather than just "Nearest Vol".
 
-### 2. Walk-Forward Stability & Leakage Prevention
-**Problem:** Current validation ignores outlier stability and risks data leakage.
+### 2. Walk-Forward Stability Check (The "Leakage" Fix)
+**Reference:** *Critical Bug in Walk-Forward Validation*
+**Problem:** `walk_forward_validation` incorrectly uses `current` price for historical targets (Look-ahead bias).
 **Fix:**
--   Rolling window GMM refit.
--   **Leakage Guard:** Refit Scaler and GMM on *train* split only; do not leak OOS data into regime definitions.
+```python
+# Use percent moves relative to START of fold
+up_pct_move = (self.target_up / self.last_price) - 1
+# if path_max >= start_price * (1 + up_pct_move): ...
+```
+**Enhancement:** Implement rolling window GMM refit to test regime stability out-of-sample.
+
+### 3. Trust Score Metric (0-100)
+-   Aggregate fidelity score (Stats 40%, Stability 30%, OOS 20%, Context 10%).
+
+### 4. Defensive Kelly Logic ("Kelly Betrayal")
+-   Scale position size by `regime_confidence` (GMM posterior).
+-   Hard penalty if VIX > 30.
 
 ---
 
-## 🟢 P2: Features & UX
+## 🛠️ P2: Engineering Enablers & Optimizations
+
+### 1. Memory Optimization (Sparse Output)
+**Problem:** Storing 5000 x 126 paths consumes excessive RAM.
+**Fix:**
+```python
+def simulate(self, use_sparse_output=True):
+    # Track hitting times online, do not store full paths
+    up_hit_times = np.full(self.simulations, np.inf)
+    # ... update in loop ...
+    return {'up_hit_times': up_hit_times, 'final_prices': ...}
+```
+
+### 2. Parallel Simulation
+**Problem:** CPU bound.
+**Fix:** Use `ProcessPoolExecutor`.
+**Crucial:** Use `np.random.SeedSequence` to ensure RNG safety across workers.
+
+### 3. Caching System
+**Problem:** Repeated runs slow down dev.
+**Fix:** Disk cache keyed by `(ticker, date, method_args)`.
+
+### 4. API Safety
+**Problem:** `run()` crashes if `ingest_data()` isn't called.
+**Fix:** Add state guard `if self.data is None: self.ingest_data()`.
+
+---
+
+## 🟢 P3: Features & UX
 
 - [ ] **Ensemble Voting:** Combine v7.0 (Macro/Regime) + Semi-Markov (Duration) + Signals (Technical).
 - [ ] **Supabase Persistence:** Save `run_id` and results.
 - [ ] **Regime Alerts:** Webhook notifications.
+- [ ] **Enhanced Risk Metrics:** Add CDaR (Conditional Drawdown at Risk), Ulcer Index, Omega Ratio.
 
 ---
 
-## 🔬 Deep Dive: Implementation Specs
+## 🔬 Deep Dive & Implementation Context
 
-### 1. Coupled Pair Sampling & Storage (P0-A)
-Store pairs as a DataFrame indexable by time for block sampling.
+### 1. Coupled Pair Sampling (Detailed)
 ```python
 def prepare_coupled_pairs(self):
-    # Dataframe structure for easy block slicing
-    # Index: Date, Columns: [Market_Ret, Asset_Residual, Regime]
-    
-    # ... computation details ...
-    
-    self.pair_db = pd.DataFrame({
-        'mkt_ret': market_rets,
-        'resid': residuals,
-        'regime': regimes
-    }, index=common_idx)
-    
-    # Also keep regime-specific buckets for Mode A
-    self.regime_buckets = {r: self.pair_db[self.pair_db['regime'] == r] for r in range(self.n_regimes)}
+    # Store aligned pairs: Market Ret, Asset Residual, Regime
+    # Important: Store as Time Series (Date Index) for Block Bootstrapping
+    self.pair_db = pd.DataFrame({'mkt': ..., 'eps': ..., 'regime': ...}, index=dates)
+
+def get_geometric_block_length(self, mean_length=20):
+    # Stationary Bootstrap: Random block length
+    return np.random.geometric(1/mean_length)
 ```
 
-### 2. Empirical Targets (P0-B)
-Use rolling H-day returns to capture actual horizon distributions.
+### 2. First-Passage Target Calibration
 ```python
-def auto_calibrate_targets(self, horizon_days=20, confidence=0.05):
-    # Calculate H-day rolling log returns
-    log_prices = np.log(self.data['Close'])
-    roll_rets = (log_prices.shift(-horizon_days) - log_prices).dropna()
-    
-    # Empirical quantiles
-    ret_up = np.percentile(roll_rets, (1-confidence)*100)
-    ret_down = np.percentile(roll_rets, confidence*100)
-    
-    self.target_up = self.last_price * np.exp(ret_up)
-    self.target_down = self.last_price * np.exp(ret_down)
+def auto_calibrate_targets(self, h=20, conf=0.05):
+    # Correct Forward-Looking Max/Min
+    roll_max = [np.max(log_prices[t:t+h]) - log_prices[t] for t in range(len(log_prices)-h)]
+    # ... Quantiles of roll_max ...
 ```
 
-### 3. Simulation Diagnostics (P0-D)
-Diagnose *why* stats diverge.
+### 3. Scarcity & Hierarchical Borrowing
 ```python
-def diagnose_simulation_mismatch(self, sim_paths, hist_returns):
-    sim_returns = np.diff(np.log(sim_paths), axis=1).flatten()
-    
-    # 1. Tail Dependence (Panic Coupling)
-    mkt_crash_thresh = np.percentile(self.market_returns, 5)
-    # Conditional probability: P(Asset < X | Mkt < Y)
-    sim_crash_prob = ... 
-    
-    # 2. Clustering (ACF of squared returns)
-    # ...
+def handle_scarce_regime(r, min_samples=80):
+    # Fallback: Borrow Global, Scale by Volatility Ratio
+    scale = regime_vol / global_vol
+    scaled_pairs = [(mkt, eps * scale) for mkt, eps in self.global_pairs]
+    return scaled_pairs
 ```
 
-### 4. Parallel RNG Safety (P0.5)
-Ensure robust randomness.
+### 4. Robust/Defensive Kelly
 ```python
-from numpy.random import SeedSequence, default_rng
-
-def simulate_parallel(self, n_workers=4):
-    ss = SeedSequence(12345)
-    child_seeds = ss.spawn(n_workers)
-    # pass child_seeds[i] to worker i
+def compute_regime_aware_kelly(self, paths, current_regime):
+    # ... Standard Kelly ...
+    # Adjust for Regime Confidence & VIX
+    if regime_conf < 0.7: kelly *= regime_conf
+    if self.vix > 30: kelly *= 0.5
+    return kelly
 ```
