@@ -27,8 +27,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Parent of to_refine/
 
 # Add project root and to_refine to path
+# Add project root and to_refine to path
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, SCRIPT_DIR)
+
+print(f"DEBUG: PROJECT_ROOT={PROJECT_ROOT}")
+print(f"DEBUG: sys.path={sys.path}")
 
 from regime_engine_v7 import RegimeRiskEngineV7
 from refinery.semi_markov import SemiMarkovModel

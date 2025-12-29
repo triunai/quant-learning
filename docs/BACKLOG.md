@@ -2,179 +2,150 @@
 
 > **Status:** Active  
 > **Last Updated:** 2025-12-29  
-> **Purpose:** Track issues, improvements, and features identified during code review.
+> **Purpose:** Track critical engineering tasks for the Regime Risk Platform.
 
 ---
 
-## 🔴 P0: Critical Fixes (Before Live Use)
+## 🔴 P0: Critical Fidelity Fixes (Prioritized)
 
-### 1. Kurtosis Mismatch in Simulation
+### P0-A: Simulation Realism (The "Kurtosis & Clustering" Fix)
+**Problem:** Statistical verification confirms kurtosis mismatch (4.14 vs 8.28) and lack of volatility clustering in simulations.
+**Root Cause 1:** Independent sampling of market/residuals kills tail dependence (panic coupling).
+**Root Cause 2:** Independent daily sampling kills serial correlation.
+**Fix Strategy:**
+1.  **Coupled Pair Sampling:** Sample `(market_ret, residual)` pairs to preserve joint distribution.
+2.  **Stationary Block Bootstrap:** Use random block lengths (Geometric, mean L=10-25) to preserve clustering without periodic artifacts.
+3.  **Mode Separation (Avoid Double Counting):**
+    *   *Mode A (Regime Model):* Semi-Markov controls switching; use coupled pairs within regimes.
+    *   *Mode B (Historical Dependent):* Pure stationary bootstrap of blocked pairs (disables Semi-Markov) as a model-free benchmark.
+**Success Criteria:**
+*   Excess Kurtosis mismatch < 1.0.
+*   Tail Dependence: $P(|r_{asset}| > q_{95} \mid r_{mkt} < q_{05})$ matches history ±10%.
+*   ACF($r^2$) matches history at lags 1, 5, 10.
 
-**Issue:** Simulated daily returns have kurtosis ~4.14 vs historical ~8.28. This means the simulation **under-represents extreme events** (tail risk is the whole point of this system).
+### P0-B: Target Realism (Auto-Calibration)
+**Problem:** Hardcoded defaults (1.5x) and `sqrt(T)` scaling break for fat-tailed assets.
+**Fix Strategy:**
+-   **Empirical Rolling Quantiles:** Use actual historical H-day returns.
+    -   `Target Up = Last Price * exp(Quantile(Roll_Ret_H, 0.95))`
+    -   `Target Down = Last Price * exp(Quantile(Roll_Ret_H, 0.05))`
+-   Automatically adapts to asset volatility and non-normal scaling.
+**Success Criteria:** Targets adapt ±20% based on asset vol; Hit rates for "Sim vs Hist" are comparable.
 
-**Impact:** VaR/CVaR estimates will be too optimistic. Real drawdowns will be worse than simulated.
+### P0-C: GARCH Reliability & Truthfulness
+**Problem:** Silent fallback to realized vol makes validation opaque.
+**Fix Strategy:**
+-   **Status Tracking:** `self.garch_status = "OK" | "MISSING" | "FAILED"`.
+-   **Convergence Check:** Warn if `garch_vol == realized_vol` (indicates silent fit failure).
+-   **Dashboard:** Explicit "ACTIVE" vs "FALLBACK" indicator.
+**Success Criteria:** Dashboard shows status with confidence intervals.
 
-**Investigation:**
-- [ ] Check if empirical residual sampling is truly uniform random
-- [ ] Verify no smoothing or averaging is applied to residual pool
-- [ ] Consider adding jump diffusion back (currently disabled) with proper separation of normal vs jump residuals
-
-**File:** `battle-tested/PLTR-test-2.py` → `simulate()` method (lines 452-552)
+### P0-D: Simulation Calibration Diagnostic
+**Problem:** Mismatches happen, but root cause is opaque.
+**Fix Strategy:**
+-   Implement `diagnose_mismatch()` returning a **"Blame Table"**:
+    -   **Unconditional:** Mean, Std, Skew, Excess Kurtosis.
+    -   **Clustering:** ACF($r^2$) at lags 1, 5, 20.
+    -   **Regime:** Occupancy (Hist vs Sim), Conditional Mean/Vol.
+    -   **Tail:** Conditional probability of asset crash given market crash.
 
 ---
 
-### 2. Targets Too Aggressive for Asset Class
+## 🟡 P0.5: Operational Control & Stability
 
-**Issue:** Default targets are +50% / -35% in 126 days. For SPY (a broad market ETF), historical hit rates are 0%.
-
-**Impact:** The signal generator always says "Sim > 1.5x historical" because targets are unreachable.
-
+### 1. Simulation Config & Reproducibility
+**Problem:** "Production" runs are slow; Parallel RNG can be flawed.
 **Fix:**
-- [ ] Add asset-class-specific target defaults:
-  - ETFs (SPY, QQQ): ±10-15%
-  - Large Cap (AAPL, MSFT): ±15-25%
-  - Growth/Volatile (PLTR, TSLA): ±30-50%
-- [ ] Or: Auto-calculate targets from historical volatility percentiles
+-   `SimulationConfig` (debug/fast/production).
+-   **RNG Safety:** Use `np.random.SeedSequence(seed).spawn(n_workers)` for independent parallel streams.
 
-**File:** `battle-tested/PLTR-test-2.py` → `__init__()` method
+### 2. Regime Definition Stability
+**Problem:** Regime counts (3 vs 4) can be arbitrary.
+**Fix:** Test sensitivity to `n_regimes` and stability of boundaries over time.
 
 ---
 
-### 3. GARCH Not Actually Forecasting
+## 🟡 P1: Robustness & Hygiene
 
-**Issue:** GARCH Vol = Realized Vol exactly. This means either:
-- `arch` package not installed properly, or
-- GARCH is failing silently and falling back to realized vol
+### 1. API Safety (The "Landmine")
+**Problem:** `run()` crashes if `ingest_data()` isn't called.
+**Fix:** Add state guard `if self.data is None: self.ingest_data()`.
 
+### 2. Walk-Forward Stability & Leakage Prevention
+**Problem:** Current validation ignores outlier stability and risks data leakage.
 **Fix:**
-- [ ] Verify `arch` is installed: `pip install arch`
-- [ ] Add explicit logging when GARCH falls back
-- [ ] GARCH should produce a *different* number than realized (it's forward-looking)
-
-**File:** `battle-tested/PLTR-test-2.py` → `run_garch()` method
+-   Rolling window GMM refit.
+-   **Leakage Guard:** Refit Scaler and GMM on *train* split only; do not leak OOS data into regime definitions.
 
 ---
 
-## 🟡 P1: Important Improvements
+## 🟢 P2: Features & UX
 
-### 4. No True Train/Test Split
-
-**Issue:** GMM is fitted on all 5Y of data, then validated on the same data. This is "illustrative backtest" mode, not true out-of-sample.
-
-**Fix:**
-- [ ] Implement walk-forward GMM refitting:
-  - Fit on trailing 3Y
-  - Validate on next 6mo
-  - Roll forward
-- [ ] Add `mode` parameter from ENGINEERING_DECISIONS_v1.1_PATCHED.md
-
-**Reference:** `docs/ENGINEERING_DECISIONS_v1.1_PATCHED.md` → Execution Modes
+- [ ] **Ensemble Voting:** Combine v7.0 (Macro/Regime) + Semi-Markov (Duration) + Signals (Technical).
+- [ ] **Supabase Persistence:** Save `run_id` and results.
+- [ ] **Regime Alerts:** Webhook notifications.
 
 ---
 
-### 5. Supabase Persistence Not Implemented
+## 🔬 Deep Dive: Implementation Specs
 
-**Issue:** Docs describe Supabase as system-of-record, but no actual persistence layer exists.
+### 1. Coupled Pair Sampling & Storage (P0-A)
+Store pairs as a DataFrame indexable by time for block sampling.
+```python
+def prepare_coupled_pairs(self):
+    # Dataframe structure for easy block slicing
+    # Index: Date, Columns: [Market_Ret, Asset_Residual, Regime]
+    
+    # ... computation details ...
+    
+    self.pair_db = pd.DataFrame({
+        'mkt_ret': market_rets,
+        'resid': residuals,
+        'regime': regimes
+    }, index=common_idx)
+    
+    # Also keep regime-specific buckets for Mode A
+    self.regime_buckets = {r: self.pair_db[self.pair_db['regime'] == r] for r in range(self.n_regimes)}
+```
 
-**Fix:**
-- [ ] Create `infrastructure/supabase/` adapter
-- [ ] Store `run_id`, `snapshot_id`, `strategy_hash`, `engine_version` per decision
-- [ ] Implement raw parquet snapshots for reproducibility
+### 2. Empirical Targets (P0-B)
+Use rolling H-day returns to capture actual horizon distributions.
+```python
+def auto_calibrate_targets(self, horizon_days=20, confidence=0.05):
+    # Calculate H-day rolling log returns
+    log_prices = np.log(self.data['Close'])
+    roll_rets = (log_prices.shift(-horizon_days) - log_prices).dropna()
+    
+    # Empirical quantiles
+    ret_up = np.percentile(roll_rets, (1-confidence)*100)
+    ret_down = np.percentile(roll_rets, confidence*100)
+    
+    self.target_up = self.last_price * np.exp(ret_up)
+    self.target_down = self.last_price * np.exp(ret_down)
+```
 
-**Reference:** `docs/ARCHITECTURE.md`, `docs/ENGINEERING_DECISIONS_v1.1_PATCHED.md`
+### 3. Simulation Diagnostics (P0-D)
+Diagnose *why* stats diverge.
+```python
+def diagnose_simulation_mismatch(self, sim_paths, hist_returns):
+    sim_returns = np.diff(np.log(sim_paths), axis=1).flatten()
+    
+    # 1. Tail Dependence (Panic Coupling)
+    mkt_crash_thresh = np.percentile(self.market_returns, 5)
+    # Conditional probability: P(Asset < X | Mkt < Y)
+    sim_crash_prob = ... 
+    
+    # 2. Clustering (ACF of squared returns)
+    # ...
+```
 
----
+### 4. Parallel RNG Safety (P0.5)
+Ensure robust randomness.
+```python
+from numpy.random import SeedSequence, default_rng
 
-### 6. Ensemble Signal Aggregation
-
-**Issue:** Three engines (v7.0, Semi-Markov, Signals Factory) run independently but don't combine into a unified recommendation.
-
-**Fix:**
-- [ ] Create weighted vote system:
-  - v7.0 signal: 40% weight
-  - Semi-Markov position size: 30% weight
-  - Signals Factory compression: 30% weight
-- [ ] Output single `final_position_size` and `final_direction`
-
-**File:** `to_refine/dashboard_consolidated.py` or new `signals_factory/ensemble.py`
-
----
-
-## 🟢 P2: Nice to Have
-
-### 7. Regime Change Alerts
-
-**Feature:** Notify when `current_regime` switches via Discord/Telegram webhook.
-
-**Implementation:**
-- [ ] Add webhook URL to config
-- [ ] Trigger on regime transition detected
-- [ ] Include: ticker, old regime, new regime, confidence
-
----
-
-### 8. Blue Color Theme
-
-**Request:** User prefers blue color scheme over current cyan/plasma.
-
-**Fix:**
-- [ ] Update `plt.style.use()` and `sns.set_palette()` in dashboard
-- [ ] Change cone chart colors from cyan to blue gradient
-- [ ] Update heatmaps to use blues
-
-**Files:** `to_refine/dashboard_consolidated.py`, `to_refine/dashboard.py`
-
----
-
-### 9. Custom Target Inputs in Dashboard
-
-**Feature:** Let user input custom `target_up` and `target_down` prices in sidebar.
-
-**Implementation:**
-- [ ] Add number inputs to sidebar
-- [ ] Pass to `RegimeRiskEngineV7` constructor
-- [ ] Update JSON export to include custom targets
-
----
-
-### 10. Backtesting Harness
-
-**Feature:** Simulate actual DCA decisions over historical periods, track P&L.
-
-**Implementation:**
-- [ ] Create `backtesting/` module
-- [ ] Implement walk-forward decision loop
-- [ ] Track: entry date, exit date, position size, PnL
-- [ ] Compute Sharpe, Sortino, max drawdown
-
----
-
-## ✅ Completed
-
-| Task | Date | Notes |
-|------|------|-------|
-| Consolidated dashboard with full logging | 2025-12-29 | `dashboard_consolidated.py` |
-| Terminal-style log capture | 2025-12-29 | `LogCapture` class |
-| JSON export with all results | 2025-12-29 | Export tab in dashboard |
-| Full calibration suite in dashboard | 2025-12-29 | Walk-forward, multi-threshold |
-| Semi-Markov integration | 2025-12-29 | Position sizing + fatigue |
-| Signals Factory integration | 2025-12-29 | Vol compression signal |
-
----
-
-## 📊 Priority Matrix
-
-| Priority | Count | Focus |
-|----------|-------|-------|
-| 🔴 P0 | 3 | Fix before using with real money |
-| 🟡 P1 | 3 | Important for production quality |
-| 🟢 P2 | 4 | UX and feature improvements |
-
----
-
-## 📝 Notes
-
-- The architecture is solid (Clean Architecture principles)
-- Statistical methodology is correct (GMM, factor model, semi-Markov)
-- Main gaps are in parameter tuning and persistence layer
-- Dashboard works; just needs the P0 fixes for reliable signals
+def simulate_parallel(self, n_workers=4):
+    ss = SeedSequence(12345)
+    child_seeds = ss.spawn(n_workers)
+    # pass child_seeds[i] to worker i
+```
