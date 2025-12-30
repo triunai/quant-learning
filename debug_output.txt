@@ -1,0 +1,12 @@
+MOMENTUM REGIME DEBUG
+==================================================
+Days: 297
+Asset mean (ann): 310.4%
+Stored beta: 2.00
+Stored alpha (ann): 103.6%
+Stored resid mean (ann): 93.8%
+
+BUG ANALYSIS:
+  alpha + resid_mean = 103.6% + 93.8% = 197.3%
+  Expected drift: 310.4%
+  MISSING DRIFT: 113.1%

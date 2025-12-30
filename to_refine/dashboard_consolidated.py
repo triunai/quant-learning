@@ -592,10 +592,47 @@ def run_mode_b_bootstrap(ticker, market_ticker, days_ahead, config_mode, log: Lo
         log.log(f"Win Rate: {risk['win_rate']:.1%}")
         log.log(f"Kelly Fraction: {risk['kelly_fraction']:.0%}")
         
+        # Confidence intervals for diagnostics
+        log.section("DIAGNOSTICS WITH CONFIDENCE INTERVALS")
+        log.log("Computing block bootstrap CIs (this takes a moment)...")
+        try:
+            diagnostics_ci = engine.compute_diagnostics_with_ci(paths, n_bootstrap=200, confidence=0.95, block_size=20)
+            
+            for metric, values in diagnostics_ci.items():
+                sig_marker = "⚠️" if values['significant'] else "✅"
+                log.log(f"  {sig_marker} {metric}: {values['formatted']}", 
+                       "WARNING" if values['significant'] else "DEBUG")
+            
+            log.log("CIs computed with Bonferroni correction for multiple testing", "SUCCESS")
+        except Exception as e:
+            log.log(f"CI computation failed: {e}", "WARNING")
+            diagnostics_ci = None
+        
+        # Path validation statistics
+        log.section("PATH VALIDATION")
+        log.log("Computing whole-path statistics...")
+        try:
+            path_stats = engine.validate_path_statistics(paths, dd_threshold=0.05)
+            
+            log.log(f"Time above initial price (mean): {path_stats['time_above_mean']:.1%}", "DEBUG")
+            log.log(f"Historical time above (mean): {path_stats['hist_time_above_mean']:.1%}", "DEBUG")
+            log.log(f"Max excursion timing (mean): {path_stats['max_time_mean']:.1%} of horizon", "DEBUG")
+            log.log(f"Drawdown duration (mean): {path_stats['drawdown_duration_mean']:.1f} days", "DEBUG")
+            log.log(f"Path roughness: {path_stats['path_roughness']:.4f}", "DEBUG")
+            
+            validation_status = "PASS" if path_stats['validation_passed'] else "FAIL"
+            log.log(f"Path validation: {validation_status}", 
+                   "SUCCESS" if path_stats['validation_passed'] else "WARNING")
+        except Exception as e:
+            log.log(f"Path validation failed: {e}", "WARNING")
+            path_stats = None
+        
         # Build results
         results = {
             'paths': paths,
             'diagnostics': diagnostics,
+            'diagnostics_ci': diagnostics_ci,
+            'path_stats': path_stats,
             'first_passage': fpt,
             'risk': risk,
             'historical_validation': hist_rates,
@@ -990,6 +1027,97 @@ if run_btn:
             
             st.pyplot(fig)
             
+            # =====================================================================
+            # NEW: Confidence Intervals Section
+            # =====================================================================
+            if mode_b_results.get('diagnostics_ci'):
+                st.divider()
+                st.markdown("### 📊 Diagnostics with Confidence Intervals")
+                st.caption("Block bootstrap CIs with Bonferroni correction for multiple testing")
+                
+                ci_data = []
+                for metric, values in mode_b_results['diagnostics_ci'].items():
+                    sig_marker = "⚠️ Significant" if values['significant'] else "✅ OK"
+                    ci_data.append({
+                        "Metric": metric,
+                        "Simulated": f"{values['value']:.4f}",
+                        "Historical": f"{values['hist']:.4f}",
+                        "95% CI": f"[{values['ci_low']:.4f}, {values['ci_high']:.4f}]",
+                        "Status": sig_marker,
+                    })
+                st.dataframe(pd.DataFrame(ci_data), use_container_width=True)
+            
+            # =====================================================================
+            # NEW: Path Validation Statistics Section
+            # =====================================================================
+            if mode_b_results.get('path_stats'):
+                st.divider()
+                st.markdown("### 🛤️ Path Validation Statistics")
+                st.caption("Whole-path properties, not just terminal distributions")
+                
+                ps = mode_b_results['path_stats']
+                col_ps1, col_ps2, col_ps3 = st.columns(3)
+                
+                with col_ps1:
+                    st.metric("Time Above Initial (Sim)", f"{ps['time_above_mean']:.1%}")
+                    st.metric("Time Above Initial (Hist)", f"{ps['hist_time_above_mean']:.1%}")
+                    validation_delta = ps['time_above_mean'] - ps['hist_time_above_mean']
+                    st.metric("Δ (Sim - Hist)", f"{validation_delta:+.1%}", 
+                             delta="OK" if abs(validation_delta) < 0.15 else "MISMATCH")
+                
+                with col_ps2:
+                    st.metric("Max Excursion Timing", f"{ps['max_time_mean']:.0%} of horizon")
+                    st.metric("Min Excursion Timing", f"{ps['min_time_mean']:.0%} of horizon")
+                    st.metric("Path Roughness", f"{ps['path_roughness']:.4f}")
+                
+                with col_ps3:
+                    st.metric("DD Duration (mean)", f"{ps['drawdown_duration_mean']:.1f} days")
+                    st.metric("DD Duration (max)", f"{ps['drawdown_duration_max']:.0f} days")
+                    st.metric("Path Validation", "✅ PASS" if ps['validation_passed'] else "❌ FAIL")
+            
+            # =====================================================================
+            # NEW: Export Mode B Results Button
+            # =====================================================================
+            st.divider()
+            st.markdown("### 💾 Export Mode B Results")
+            
+            # Build Mode B export data
+            mode_b_export = {
+                "ticker": ticker,
+                "market_ticker": market_ticker,
+                "timestamp": datetime.now().isoformat(),
+                "config": {
+                    "mode": mode_b_config,
+                    "days_ahead": days_ahead,
+                },
+                "price": mode_b_engine.last_price,
+                "beta": mode_b_engine.beta,
+                "alpha_ann": mode_b_engine.alpha * 252,
+                "realized_vol": mode_b_engine.realized_vol,
+                "all_gates_passed": mode_b_results['all_gates_passed'],
+                "diagnostics": [d.to_dict() for d in mode_b_results['diagnostics']],
+                "first_passage": mode_b_results['first_passage'],
+                "risk": {k: v for k, v in mode_b_results['risk'].items() if k != 'max_drawdowns'},
+                "historical_validation": mode_b_results['historical_validation'],
+            }
+            
+            # Add CI data if available
+            if mode_b_results.get('diagnostics_ci'):
+                mode_b_export['diagnostics_ci'] = mode_b_results['diagnostics_ci']
+            
+            # Add path stats if available
+            if mode_b_results.get('path_stats'):
+                mode_b_export['path_stats'] = mode_b_results['path_stats']
+            
+            mode_b_json = json.dumps(mode_b_export, indent=2, default=str)
+            
+            st.download_button(
+                label="📥 Download Mode B Results as JSON",
+                data=mode_b_json,
+                file_name=f"{ticker}_mode_b_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
+            
         else:
             st.info("Enable and run Mode B (Stationary Bootstrap) to see the ground truth benchmark.")
     
@@ -1018,6 +1146,9 @@ if run_btn:
             ax1.axhline(v7_engine.target_up, color='lime', ls=':', lw=2, label=f'Up ${v7_engine.target_up:.0f}')
             ax1.axhline(v7_engine.target_down, color='red', ls=':', lw=2, label=f'Down ${v7_engine.target_down:.0f}')
             ax1.axhline(v7_engine.last_price, color='white', lw=1, alpha=0.5)
+            
+            # Get current regime name
+            regime_name = v7_engine.regime_names.get(v7_engine.current_regime, f"R{v7_engine.current_regime}")
             
             ax1.set_title(f"{ticker} v7.0 | {v7_signal['signal']} | {regime_name} | Beta={v7_engine.market_beta:.1f}",
                           fontsize=14, fontweight='bold')

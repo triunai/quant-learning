@@ -206,7 +206,7 @@ class DiagnosticResult:
 # NUMBA JIT-COMPILED SIMULATION KERNEL (10x Speedup)
 # =============================================================================
 
-@njit(cache=True)
+@njit(cache=False)  # Note: cache=True causes import issues when module is in subdirectory
 def _simulate_paths_numba(
     n_sims: int,
     n_days: int,
@@ -421,6 +421,10 @@ class StationaryBootstrap:
         self.alpha = beta_ridge[0]
         self.beta = beta_ridge[1]
         
+        # SANITY CHECK: Alpha plausibility
+        # Large alphas often indicate survivorship bias or data issues
+        self._check_alpha_plausibility()
+        
         # Compute residuals
         fitted = self.alpha + self.beta * market_ret
         residuals = asset_ret - fitted
@@ -435,6 +439,29 @@ class StationaryBootstrap:
         }, index=self.data.index)
         
         print(f"[MODE B] Beta: {self.beta:.2f}, Alpha (ann): {self.alpha * 252:+.1%}")
+    
+    def _check_alpha_plausibility(self, max_annual_alpha: float = 0.05) -> None:
+        """
+        Sanity check for implausible alpha values.
+        
+        Large alphas (> 5% annualized) often indicate:
+        - Survivorship bias (analyzing only stocks that survived)
+        - Look-ahead bias (using future info in data)
+        - Data errors (wrong adjustment factors)
+        - Regime change (structural break in relationship)
+        
+        Args:
+            max_annual_alpha: Maximum plausible annual alpha (default 5%)
+        """
+        annual_alpha = self.alpha * 252
+        if abs(annual_alpha) > max_annual_alpha:
+            warnings.warn(
+                f"⚠️ Large alpha detected: {annual_alpha:+.1%} annualized. "
+                f"This may indicate survivorship bias, look-ahead bias, or data issues. "
+                f"Threshold: ±{max_annual_alpha:.0%}. "
+                f"Consider verifying data integrity.",
+                UserWarning
+            )
     
     def _get_geometric_block_length(self) -> int:
         """
@@ -699,6 +726,246 @@ class StationaryBootstrap:
         ))
         
         return results
+    
+    def compute_diagnostics_with_ci(
+        self, 
+        paths: np.ndarray, 
+        n_bootstrap: int = 500,
+        confidence: float = 0.95,
+        block_size: int = 20
+    ) -> Dict[str, Dict]:
+        """
+        Compute diagnostic metrics with proper block bootstrap confidence intervals.
+        
+        Uses circular block bootstrap to preserve temporal dependence.
+        Applies Bonferroni correction for multiple testing.
+        
+        Args:
+            paths: Simulated price paths
+            n_bootstrap: Number of bootstrap samples for CI
+            confidence: Confidence level (default 95%)
+            block_size: Block size for temporal bootstrap
+            
+        Returns:
+            Dict with metrics and their CIs: {metric: {value, ci_low, ci_high, hist, significant}}
+        """
+        # Extract returns from paths
+        sim_returns = np.diff(np.log(paths), axis=1).flatten()
+        hist_returns = self.data['Log_Ret'].values
+        
+        # =====================================================================
+        # HELPER: Correct ACF calculation
+        # =====================================================================
+        def acf_squared(series: np.ndarray, lag: int) -> float:
+            """
+            Compute autocorrelation of squared returns at given lag.
+            Uses proper normalization for autocorrelation coefficient.
+            """
+            r2 = series ** 2
+            n = len(r2)
+            if n <= lag:
+                return 0.0
+            # Remove mean
+            mean = np.mean(r2)
+            var = np.var(r2, ddof=0)
+            if var == 0:
+                return 0.0
+            # Proper autocorrelation: sum of lagged products / (n * variance)
+            acf = np.sum((r2[lag:] - mean) * (r2[:-lag] - mean)) / (n * var)
+            return float(acf)
+        
+        # =====================================================================
+        # HELPER: Circular block bootstrap (preserves temporal structure)
+        # =====================================================================
+        def circular_block_bootstrap(series: np.ndarray, block_sz: int) -> np.ndarray:
+            """
+            Circular block bootstrap that preserves temporal dependence.
+            Essential for valid CIs on time series statistics.
+            """
+            n = len(series)
+            n_blocks = int(np.ceil(n / block_sz))
+            
+            # Generate random starting points (circular wrapping)
+            starts = self.rng.integers(0, n, size=n_blocks)
+            blocks = []
+            
+            for start in starts:
+                end = start + block_sz
+                if end > n:
+                    # Wrap around (circular)
+                    block = np.concatenate([series[start:], series[:end - n]])
+                else:
+                    block = series[start:end]
+                blocks.append(block)
+            
+            # Concatenate and trim to original length
+            return np.concatenate(blocks)[:n]
+        
+        def bootstrap_metric_block(
+            series: np.ndarray, 
+            metric_fn: Callable, 
+            n_boot: int, 
+            block_sz: int
+        ) -> np.ndarray:
+            """Block bootstrap for time series metrics."""
+            metrics = []
+            for _ in range(n_boot):
+                boot_sample = circular_block_bootstrap(series, block_sz)
+                metrics.append(metric_fn(boot_sample))
+            return np.array(metrics)
+        
+        # =====================================================================
+        # METRICS TO COMPUTE
+        # =====================================================================
+        metric_functions = {
+            'ACF(r²) lag 1': lambda x: acf_squared(x, 1),
+            'ACF(r²) lag 5': lambda x: acf_squared(x, 5),
+            'ACF(r²) lag 10': lambda x: acf_squared(x, 10),
+            'Kurtosis': lambda x: float(stats.kurtosis(x)),
+            'Skewness': lambda x: float(stats.skew(x)),
+        }
+        
+        # =====================================================================
+        # BONFERRONI CORRECTION for multiple testing
+        # =====================================================================
+        n_metrics = len(metric_functions)
+        alpha_bonferroni = (1 - confidence) / n_metrics
+        
+        results = {}
+        
+        for name, metric_fn in metric_functions.items():
+            # Historical value
+            hist_value = metric_fn(hist_returns)
+            
+            # Simulated value
+            sim_value = metric_fn(sim_returns)
+            
+            # Use block bootstrap for ACF metrics, regular for i.i.d. metrics
+            if 'ACF' in name:
+                boot_values = bootstrap_metric_block(
+                    sim_returns, metric_fn, n_bootstrap, block_size
+                )
+            else:
+                # Kurtosis/skewness: i.i.d. bootstrap is valid
+                boot_values = []
+                n = len(sim_returns)
+                for _ in range(n_bootstrap):
+                    idx = self.rng.integers(0, n, size=n)
+                    boot_values.append(metric_fn(sim_returns[idx]))
+                boot_values = np.array(boot_values)
+            
+            # Confidence intervals with Bonferroni correction
+            ci_low = float(np.percentile(boot_values, 100 * alpha_bonferroni / 2))
+            ci_high = float(np.percentile(boot_values, 100 * (1 - alpha_bonferroni / 2)))
+            
+            # Significance test (with Bonferroni correction)
+            significant = hist_value < ci_low or hist_value > ci_high
+            
+            results[name] = {
+                'value': float(sim_value),
+                'ci_low': ci_low,
+                'ci_high': ci_high,
+                'hist': float(hist_value),
+                'significant': significant,
+                'bonferroni_corrected': True,
+                'formatted': f"{sim_value:.4f} [{ci_low:.4f}, {ci_high:.4f}] vs {hist_value:.4f}"
+            }
+        
+        return results
+    
+    def validate_path_statistics(self, paths: np.ndarray, dd_threshold: float = 0.05) -> Dict:
+        """
+        Validate whole-path properties, not just terminal distributions.
+        
+        This checks:
+        - Time spent above/below initial price
+        - Maximum excursion timing
+        - Drawdown duration statistics
+        - Path roughness (Hurst exponent proxy)
+        
+        Args:
+            paths: Simulated price paths of shape (n_sims, n_days)
+            dd_threshold: Drawdown threshold (default 5%)
+            
+        Returns:
+            Dict with path statistics
+        """
+        n_sims, n_days = paths.shape
+        initial_price = self.last_price
+        
+        # Time spent above initial price (should be ~50% for random walk)
+        time_above = np.mean(paths > initial_price, axis=1)
+        
+        # Maximum price timing (when does max occur?)
+        max_time = np.argmax(paths, axis=1) / n_days  # Normalized to [0,1]
+        
+        # Minimum price timing
+        min_time = np.argmin(paths, axis=1) / n_days
+        
+        # =====================================================================
+        # OPTIMIZED: Efficient drawdown duration calculation
+        # =====================================================================
+        def compute_drawdown_durations(path: np.ndarray, threshold: float) -> np.ndarray:
+            """Vectorized drawdown duration calculation for single path."""
+            running_max = np.maximum.accumulate(path)
+            drawdown = (path - running_max) / running_max
+            in_drawdown = drawdown < -threshold
+            
+            if not np.any(in_drawdown):
+                return np.array([])
+            
+            # Vectorized run detection
+            padded = np.concatenate([[False], in_drawdown, [False]])
+            changes = np.diff(padded.astype(int))
+            starts = np.where(changes == 1)[0]
+            ends = np.where(changes == -1)[0]
+            return ends - starts
+        
+        # Sample paths for speed (limit to 500 for O(500*126) ~ 63k ops)
+        sample_size = min(n_sims, 500)
+        sample_indices = self.rng.choice(n_sims, size=sample_size, replace=False)
+        
+        drawdown_durations = []
+        for s in sample_indices:
+            durations = compute_drawdown_durations(paths[s, :], dd_threshold)
+            drawdown_durations.extend(durations)
+        
+        drawdown_durations = np.array(drawdown_durations) if drawdown_durations else np.array([0])
+        
+        # Path roughness (variance of log returns as proxy for Hurst)
+        log_returns = np.diff(np.log(paths), axis=1)
+        roughness = np.std(np.std(log_returns, axis=1))
+        
+        # =====================================================================
+        # Historical comparison with OVERLAPPING windows (more statistical power)
+        # Use step of 5 days instead of non-overlapping to get more samples
+        # =====================================================================
+        hist_prices = self.data[self._price_col].values
+        n_hist = len(hist_prices)
+        step = max(5, n_days // 10)  # Adaptive step: at least 5 days
+        
+        hist_windows = []
+        for t in range(0, n_hist - n_days, step):
+            window = hist_prices[t:t + n_days]
+            hist_windows.append(np.mean(window > window[0]))
+        hist_time_above = np.array(hist_windows) if hist_windows else np.array([0.5])
+        
+        return {
+            'time_above_mean': float(np.mean(time_above)),
+            'time_above_std': float(np.std(time_above)),
+            'time_above_expected': 0.5,  # Random walk expectation
+            'max_time_mean': float(np.mean(max_time)),
+            'max_time_std': float(np.std(max_time)),
+            'min_time_mean': float(np.mean(min_time)),
+            'min_time_std': float(np.std(min_time)),
+            'drawdown_duration_mean': float(np.mean(drawdown_durations)),
+            'drawdown_duration_max': float(np.max(drawdown_durations)) if len(drawdown_durations) > 0 else 0,
+            'drawdown_threshold': dd_threshold,
+            'path_roughness': float(roughness),
+            'hist_time_above_mean': float(np.mean(hist_time_above)),
+            'hist_n_windows': len(hist_windows),
+            'validation_passed': abs(np.mean(time_above) - np.mean(hist_time_above)) < 0.15,
+        }
     
     def analyze_first_passage(
         self, 

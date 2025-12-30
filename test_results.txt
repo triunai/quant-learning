@@ -1,0 +1,52 @@
+======================================================================
+COHERENT FACTOR MODEL VALIDATION
+======================================================================
+
+
+[Bear] (model: factor)
+  Days: 704
+  Beta: 1.59
+  Alpha (ann): -56.0%
+  Residual mean (ann): -0.0000%
+
+  DRIFT DECOMPOSITION:
+    Alpha contribution: -56.0%
+    Beta*Market contrib: +6.1%
+    Model total: -49.8%
+    Actual drift: -49.8%
+    ERROR: 0.00%
+
+[Crisis] (model: factor)
+  Days: 194
+  Beta: 1.92
+  Alpha (ann): -3.9%
+  Residual mean (ann): -0.0000%
+
+  DRIFT DECOMPOSITION:
+    Alpha contribution: -3.9%
+    Beta*Market contrib: -17.9%
+    Model total: -21.8%
+    Actual drift: -21.8%
+    ERROR: 0.00%
+
+[Momentum] (model: factor)
+  Days: 297
+  Beta: 1.80
+  Alpha (ann): +208.5%
+  Residual mean (ann): 0.0000%
+
+  DRIFT DECOMPOSITION:
+    Alpha contribution: +208.5%
+    Beta*Market contrib: +101.9%
+    Model total: +310.4%
+    Actual drift: +310.4%
+    ERROR: 0.00%
+
+======================================================================
+WHAT-IF MOMENTUM TEST
+======================================================================
+
+  Bear regime probability of $276: 45.4%
+  Momentum regime probability of $276: 61.9%
+
+  [SUCCESS] Momentum (61.9%) > Bear (45.4%)

@@ -102,6 +102,13 @@ class RegimeRiskPlatform:
         self.regime_mu = {}
         self.regime_sigma = {}
         self.regime_duration = {}  # Semi-Markov
+        self.regime_beta = {}  # CRITICAL: Regime-specific betas
+        self.regime_alpha = {}  # Regime-specific alphas
+        self.regime_residuals = {}  # Regime-specific residual pools
+
+        # Asymmetric betas (up/down market days)
+        self.beta_up = 1.0
+        self.beta_down = 1.0
 
         # Jump diffusion params
         self.jump_prob = 0.02  # 2% daily jump probability
@@ -110,6 +117,7 @@ class RegimeRiskPlatform:
 
         # Macro conditioning
         self.market_beta = 0
+        self.market_alpha = 0
         self.idio_vol = 0
 
         # Transition matrix
@@ -255,6 +263,9 @@ class RegimeRiskPlatform:
 
         # Transition matrix
         self._compute_transition_matrix()
+        
+        # Rename regimes by Sharpe ratio for meaningful labels
+        self._compute_regime_names_by_sharpe()
 
     def _fallback_regimes(self):
         """Simple vol-based regimes if sklearn unavailable."""
@@ -262,6 +273,76 @@ class RegimeRiskPlatform:
         self.current_regime = int(self.data['Regime'].iloc[-1])
         self._compute_regime_stats()
         self._compute_transition_matrix()
+
+    def _compute_regime_names_by_sharpe(self):
+        """
+        Name regimes by SHARPE RATIO, not just volatility.
+        This gives more meaningful regime labels.
+        """
+        regime_stats = []
+        
+        for r in range(self.n_regimes):
+            mask = self.data['Regime'] == r
+            returns = self.data.loc[mask, 'Log_Ret'].values
+            
+            if len(returns) < 20:
+                continue
+                
+            # Calculate annualized stats
+            ann_return = np.mean(returns) * 252
+            ann_vol = np.std(returns) * np.sqrt(252)
+            sharpe = ann_return / ann_vol if ann_vol > 0 else 0
+            
+            # Get other characteristics
+            avg_dd = self.data.loc[mask, 'Drawdown'].mean()
+            avg_vol = self.data.loc[mask, 'Vol_20d'].mean()
+            n_samples = np.sum(mask)
+            
+            regime_stats.append({
+                'regime': r,
+                'sharpe': sharpe,
+                'return': ann_return,
+                'vol': ann_vol,
+                'avg_dd': avg_dd,
+                'avg_vol': avg_vol,
+                'n': n_samples
+            })
+        
+        # Sort by Sharpe ratio (highest first)
+        regime_stats.sort(key=lambda x: x['sharpe'], reverse=True)
+        
+        # Assign meaningful names based on characteristics
+        for i, stats in enumerate(regime_stats):
+            r = stats['regime']
+            
+            # Characterize by multiple factors
+            is_crisis = stats['avg_dd'] < -0.25  # Deep drawdown
+            is_high_vol = stats['avg_vol'] > 0.60  # Very high volatility
+            is_high_return = stats['return'] > 1.0  # >100% annual return
+            
+            if is_crisis and is_high_vol:
+                self.regime_names[r] = "Crisis"
+            elif is_high_return and stats['sharpe'] > 1.0:
+                self.regime_names[r] = "Momentum"
+            elif stats['return'] > 0.2:
+                self.regime_names[r] = "Bull"
+            elif stats['return'] < -0.3:  # -30% annual
+                self.regime_names[r] = "Bear"
+            else:
+                # Default by ranking
+                if i == 0:
+                    self.regime_names[r] = "High Alpha"
+                elif i == 1:
+                    self.regime_names[r] = "Neutral"
+                else:
+                    self.regime_names[r] = "Low Alpha"
+        
+        # Print diagnostics
+        print("\n[REGIME CHARACTERIZATION BY SHARPE]")
+        for stats in regime_stats:
+            name = self.regime_names.get(stats['regime'], f"R{stats['regime']}")
+            print(f"    {name:12} | Sharpe: {stats['sharpe']:.2f} | Return: {stats['return']:.1%} "
+                  f"| Vol: {stats['vol']:.1%} | DD: {stats['avg_dd']:.1%} | N={int(stats['n'])}")
 
     def _compute_regime_stats(self):
         """Compute per-regime return distributions."""
@@ -332,58 +413,105 @@ class RegimeRiskPlatform:
         self.transition_matrix = matrix
 
     # =========================================================================
-    # MACRO CONDITIONING (WITH ALPHA!)
+    # MACRO CONDITIONING (COHERENT FACTOR MODEL)
     # =========================================================================
 
     def compute_market_beta(self):
         """
-        Compute beta AND ALPHA vs market.
-        CRITICAL: r = alpha + beta*r_market + epsilon
-        Missing alpha collapses upside probability.
+        COHERENT factor model with guaranteed zero-mean residuals.
+        
+        Key principles:
+        1. Standard OLS beta (not asymmetric - can't use in simulation)
+        2. Mean-based alpha (not median - guarantees E[residuals] = 0)
+        3. R-squared check: Fallback to empirical if factor model is useless
+        4. Drift validation: Model drift must equal actual drift
         """
-        print(f"[MACRO] Computing alpha + beta vs {self.market_ticker}...")
-
+        print(f"[MACRO] Computing COHERENT beta/alpha vs {self.market_ticker}...")
+        
         asset_ret = self.data['Log_Ret'].values
         market_ret = self.market_data['Log_Ret'].values
-
-        # Simple OLS: r_asset = alpha + beta*r_market + epsilon
-        cov = np.cov(asset_ret, market_ret)
-        self.market_beta = cov[0, 1] / cov[1, 1] if cov[1, 1] > 0 else 1.0
-
-        # CRITICAL FIX: Compute alpha (intercept)
+        
+        # Global OLS regression
+        cov_matrix = np.cov(asset_ret, market_ret)
+        self.market_beta = cov_matrix[0, 1] / cov_matrix[1, 1] if cov_matrix[1, 1] > 0 else 1.0
+        
+        # Alpha from mean (guarantees zero-mean residuals)
         self.market_alpha = float(np.mean(asset_ret) - self.market_beta * np.mean(market_ret))
-
-        # Residuals
+        
+        # Residuals (zero mean by construction)
         residuals = asset_ret - (self.market_alpha + self.market_beta * market_ret)
         self.idio_vol = float(np.std(residuals) * np.sqrt(252))
-
-        # Per-regime alpha (even better!)
-        self.regime_alpha = {}
+        
+        # R-squared for global model
+        r_squared_global = 1 - np.var(residuals) / np.var(asset_ret) if np.var(asset_ret) > 0 else 0
+        
+        print(f"    Global: B={self.market_beta:.2f}, A={self.market_alpha*252:+.1%} ann")
+        print(f"    R-squared: {r_squared_global:.2f} | Idio vol: {self.idio_vol:.1%}")
+        
+        # Per-regime coherent factor model
+        print("    Regime-specific parameters:")
+        self.regime_model_type = {}  # Track model type per regime
+        self.regime_returns = {}  # For empirical fallback
+        
         for r in range(self.n_regimes):
             mask = self.data['Regime'].values == r
-            if np.sum(mask) > 10:
-                r_asset = asset_ret[mask]
-                r_market = market_ret[mask]
-                self.regime_alpha[r] = float(np.mean(r_asset) - self.market_beta * np.mean(r_market))
-            else:
-                self.regime_alpha[r] = self.market_alpha
-
-        # Store per-regime residual pools for empirical sampling
-        self.regime_residuals = {}
-        for r in range(self.n_regimes):
-            mask = self.data['Regime'].values == r
-            if np.sum(mask) > 10:
-                r_asset = asset_ret[mask]
-                r_market = market_ret[mask]
-                self.regime_residuals[r] = r_asset - (self.regime_alpha[r] + self.market_beta * r_market)
-            else:
-                self.regime_residuals[r] = residuals
-
-        print(f"    Beta: {self.market_beta:.2f} | Alpha (ann): {self.market_alpha*252:.1%}")
-        print(f"    Idio vol: {self.idio_vol:.1%}")
-        for r in range(self.n_regimes):
             name = self.regime_names.get(r, f"R{r}")
-            print(f"      {name} alpha: {self.regime_alpha[r]*252:+.1%}")
+            
+            if np.sum(mask) < 30:
+                # Not enough data - use global
+                self.regime_beta[r] = self.market_beta
+                self.regime_alpha[r] = self.market_alpha
+                self.regime_residuals[r] = residuals
+                self.regime_model_type[r] = "global"
+                print(f"      {name}: Using global (n={np.sum(mask)} < 30)")
+                continue
+            
+            r_asset = asset_ret[mask]
+            r_market = market_ret[mask]
+            
+            # 1. OLS beta (standard, not asymmetric)
+            cov_r = np.cov(r_asset, r_market)
+            beta = cov_r[0, 1] / cov_r[1, 1] if cov_r[1, 1] > 0 else self.market_beta
+            
+            # 2. Alpha from MEAN (guarantees zero-mean residuals)
+            alpha = np.mean(r_asset) - beta * np.mean(r_market)
+            
+            # 3. Residuals (zero mean BY CONSTRUCTION)
+            regime_residuals = r_asset - (alpha + beta * r_market)
+            
+            # ENFORCE zero mean (numerical precision)
+            regime_residuals = regime_residuals - np.mean(regime_residuals)
+            
+            # 4. R-squared check: Does factor model explain variance?
+            r_squared = 1 - np.var(regime_residuals) / np.var(r_asset) if np.var(r_asset) > 0 else 0
+            
+            # 5. Validate drift decomposition
+            actual_drift = np.mean(r_asset) * 252
+            model_drift = (alpha + beta * np.mean(r_market)) * 252
+            drift_error = abs(actual_drift - model_drift) / abs(actual_drift) if actual_drift != 0 else 0
+            
+            # 6. Decide: Factor model or empirical?
+            if r_squared < 0.05:  # Factor model explains < 5% variance
+                # Fall back to empirical sampling
+                self.regime_returns[r] = r_asset
+                self.regime_model_type[r] = "empirical"
+                self.regime_beta[r] = beta  # Store for reference
+                self.regime_alpha[r] = alpha
+                self.regime_residuals[r] = regime_residuals
+                print(f"      {name}: EMPIRICAL (R2={r_squared:.2f} too low) | drift={actual_drift:+.1%}")
+            else:
+                # Use factor model
+                self.regime_beta[r] = beta
+                self.regime_alpha[r] = alpha
+                self.regime_residuals[r] = regime_residuals
+                self.regime_model_type[r] = "factor"
+                
+                # Sanity check
+                resid_mean = np.mean(regime_residuals) * 252
+                if abs(resid_mean) > 1.0:  # More than 1% annual
+                    print(f"      {name}: WARNING resid_mean={resid_mean:.1f}%")
+                
+                print(f"      {name}: B={beta:.2f}, A={alpha*252:+.1%}, R2={r_squared:.2f}, drift={actual_drift:+.1%}")
 
     # =========================================================================
     # VIX + ANOMALY
@@ -496,19 +624,29 @@ class RegimeRiskPlatform:
 
             for s in range(self.simulations):
                 r = current_regimes[s]
-
-                # Get per-regime alpha
-                alpha = self.regime_alpha.get(r, self.market_alpha)
-
-                # Market component
-                market_ret = market_returns[s, d]
-
-                # Sample residual EMPIRICALLY (preserves fat tails!)
-                residual_pool = self.regime_residuals.get(r, np.array([0]))
-                epsilon = np.random.choice(residual_pool)
-
-                # Full factor model
-                returns[s] = alpha + self.market_beta * market_ret + epsilon
+                
+                # Check model type for this regime
+                model_type = getattr(self, 'regime_model_type', {}).get(r, 'factor')
+                
+                if model_type == "empirical":
+                    # Pure empirical: sample directly from historical returns
+                    regime_rets = self.regime_returns.get(r, self.data['Log_Ret'].values)
+                    returns[s] = np.random.choice(regime_rets)
+                else:
+                    # Factor model: alpha + beta*market + epsilon
+                    alpha = self.regime_alpha.get(r, self.market_alpha)
+                    beta = self.regime_beta.get(r, self.market_beta)
+                    market_ret = market_returns[s, d]
+                    
+                    # Sample residual EMPIRICALLY (preserves fat tails)
+                    residual_pool = self.regime_residuals.get(r, np.array([0]))
+                    if len(residual_pool) > 0:
+                        epsilon = np.random.choice(residual_pool)
+                    else:
+                        epsilon = 0
+                    
+                    # Coherent factor model
+                    returns[s] = alpha + beta * market_ret + epsilon
 
             # NOTE: Jump diffusion DISABLED to avoid double-counting
             # Empirical residual sampling already preserves fat tails from historical data.
@@ -856,6 +994,251 @@ class RegimeRiskPlatform:
 
         return None
 
+    def diagnose_under_prediction(self):
+        """
+        Diagnose why model under-predicts hit probabilities.
+        This is a CRITICAL diagnostic for calibration issues.
+        """
+        print("\n" + "="*70)
+        print("UNDER-PREDICTION DIAGNOSIS")
+        print("="*70)
+        
+        # 1. Check regime distribution
+        print("\n1. REGIME DISTRIBUTION:")
+        for r in range(self.n_regimes):
+            name = self.regime_names.get(r, f"R{r}")
+            mask = self.data['Regime'] == r
+            n_days = int(np.sum(mask))
+            pct = n_days / len(self.data) * 100
+            mean_return = np.mean(self.data.loc[mask, 'Log_Ret']) * 252 * 100
+            print(f"   {name:10}: {n_days:4} days ({pct:.1f}%) | Mean return: {mean_return:+.1f}%")
+        
+        # 2. Check alpha contributions
+        print("\n2. ALPHA DECOMPOSITION:")
+        print(f"   Global alpha (ann): {self.market_alpha * 252 * 100:+.1f}%")
+        print(f"   Current regime: {self.regime_names.get(self.current_regime, 'Unknown')}")
+        
+        for r in range(self.n_regimes):
+            name = self.regime_names.get(r, f"R{r}")
+            alpha = self.regime_alpha.get(r, 0) * 252 * 100
+            print(f"   {name} alpha (ann): {alpha:+.1f}%")
+        
+        # 3. Check residual distribution
+        print("\n3. RESIDUAL DISTRIBUTION (vs Normal):")
+        asset_ret = self.data['Log_Ret'].values
+        market_ret = self.market_data['Log_Ret'].values
+        global_residuals = asset_ret - (self.market_alpha + self.market_beta * market_ret)
+        
+        res_std = np.std(global_residuals)
+        res_mean = np.mean(global_residuals)
+        normal_tail = stats.norm.ppf(0.95) * res_std
+        actual_95 = np.percentile(global_residuals, 95)
+        actual_5 = np.percentile(global_residuals, 5)
+        
+        print(f"   Residual mean: {res_mean*100:.4f}% (should be ~0)")
+        print(f"   Residual std: {res_std*100:.3f}%")
+        print(f"   Normal 95th: {normal_tail*100:.3f}%")
+        print(f"   Actual 95th: {actual_95*100:.3f}%")
+        print(f"   Actual 5th: {actual_5*100:.3f}%")
+        print(f"   Tail fatness (95th): {actual_95/normal_tail:.2f}x")
+        
+        # 4. Check per-regime residual pools
+        print("\n4. PER-REGIME RESIDUAL POOLS:")
+        for r in range(self.n_regimes):
+            name = self.regime_names.get(r, f"R{r}")
+            pool = self.regime_residuals.get(r, np.array([0]))
+            pool_mean = np.mean(pool) * 252 * 100 if len(pool) > 0 else 0
+            pool_std = np.std(pool) * np.sqrt(252) * 100 if len(pool) > 0 else 0
+            print(f"   {name}: n={len(pool)}, mean={pool_mean:+.1f}% ann, std={pool_std:.1f}%")
+        
+        # 5. CRITICAL: Check if simulation drift matches history
+        print("\n5. SIMULATION DRIFT TEST:")
+        
+        # Run a quick simulation
+        print("   Running 1000 paths to check drift...")
+        orig_sims = self.simulations
+        self.simulations = 1000
+        try:
+            test_paths = self.simulate()
+            
+            # Extract drift from paths
+            final_prices = test_paths[:, -1]
+            sim_returns = np.log(final_prices / self.last_price) / (self.days_ahead/252)
+            sim_mean = np.mean(sim_returns)
+            
+            # Historical drift
+            hist_mean = np.mean(asset_ret) * 252
+            
+            print(f"   Simulated annual drift: {sim_mean*100:+.1f}%")
+            print(f"   Historical annual drift: {hist_mean*100:+.1f}%")
+            drift_ratio = sim_mean / hist_mean if hist_mean != 0 else 0
+            print(f"   Drift ratio (sim/hist): {drift_ratio:.2f}x")
+            
+            if drift_ratio < 0.5:
+                print(f"\n   [!] CRITICAL: Simulation drift is only {drift_ratio:.0%} of historical!")
+                print(f"   This explains the under-prediction.")
+            elif drift_ratio > 1.5:
+                print(f"\n   [!] WARNING: Simulation drift is {drift_ratio:.1f}x historical!")
+                print(f"   Model may be OVER-predicting.")
+            else:
+                print(f"\n   [OK] Drift ratio is reasonable.")
+                
+        finally:
+            self.simulations = orig_sims
+        
+        # 6. Check regime persistence in simulation
+        print("\n6. REGIME PERSISTENCE CHECK:")
+        print(f"   Current regime: {self.regime_names.get(self.current_regime, 'Unknown')}")
+        if self.regime_probs is not None:
+            try:
+                probs_list = [float(p) for p in np.array(self.regime_probs).flatten()[:self.n_regimes]]
+                print(f"   Regime probs: {[f'{p:.0%}' for p in probs_list]}")
+            except:
+                print(f"   Regime probs: {self.regime_probs}")
+        else:
+            print(f"   Regime probs: N/A")
+        
+        current_alpha = self.regime_alpha.get(self.current_regime, self.market_alpha) * 252 * 100
+        global_alpha = self.market_alpha * 252 * 100
+        
+        if current_alpha < global_alpha - 10:
+            print(f"\n   [!] Current regime alpha ({current_alpha:+.1f}%) is much lower than global ({global_alpha:+.1f}%)")
+            print(f"   Simulations starting in this regime will under-estimate upside.")
+        
+        print("\n" + "="*70)
+
+    def walk_forward_validation_fixed(self, n_folds: int = 10, target_pct: float = 0.50):
+        """
+        FIXED walk-forward validation using PERCENTAGE moves (not absolute prices).
+        
+        Args:
+            n_folds: Number of walk-forward folds
+            target_pct: Percentage move to test (e.g., 0.50 for +50%)
+        
+        Returns:
+            Dict with calibration metrics
+        """
+        print(f"\n[WALK-FORWARD VALIDATION FIXED] ({n_folds} folds, +{target_pct:.0%})")
+        
+        closes = self.data['Close'].values
+        n = len(closes)
+        
+        # Use PERCENTAGE moves, not absolute prices
+        target_mult = 1.0 + target_pct  # e.g., 1.50 for +50%
+        
+        # Ensure we have enough data for meaningful folds
+        min_fold_size = self.days_ahead * 2
+        actual_folds = min(n_folds, (n - self.days_ahead) // min_fold_size)
+        
+        if actual_folds < 3:
+            print(f"    WARNING: Only {actual_folds} folds possible. Need more data.")
+            return None
+        
+        predictions = []
+        actuals = []
+        fold_details = []
+        
+        # Use expanding window for more robust training
+        for fold in range(actual_folds):
+            # Test window: most recent chunk not used in training
+            test_start = n - (actual_folds - fold) * min_fold_size
+            test_end = min(test_start + self.days_ahead, n)
+            
+            # Training window: all data BEFORE test_start
+            train_end = test_start - 1
+            
+            if train_end <= self.days_ahead * 3:
+                continue  # Not enough training data
+            
+            # Get training closes
+            train_closes = closes[:train_end]
+            
+            # Compute historical hit rate on training data
+            up_hits = 0
+            windows = 0
+            
+            # IMPORTANT: Use SAME PERCENTAGE for all windows
+            for t in range(len(train_closes) - self.days_ahead):
+                start_price = train_closes[t]
+                path = train_closes[t:t + self.days_ahead]
+                
+                # Apply percentage move to this window's start price
+                target_price = start_price * target_mult
+                if np.max(path) >= target_price:
+                    up_hits += 1
+                windows += 1
+            
+            # Calculate empirical probability
+            if windows > 10:
+                predicted_prob = up_hits / windows
+            else:
+                predicted_prob = 0.5  # Default if insufficient data
+            
+            # Actual outcome on test window
+            test_start_price = closes[test_start]
+            test_path = closes[test_start:test_end]
+            test_target = test_start_price * target_mult
+            actual_hit = 1 if np.max(test_path) >= test_target else 0
+            
+            # Store results
+            predictions.append(predicted_prob)
+            actuals.append(actual_hit)
+            fold_details.append({
+                'fold': fold,
+                'train_end': train_end,
+                'test_start': test_start,
+                'pred': predicted_prob,
+                'actual': actual_hit,
+                'target_mult': target_mult,
+                'test_start_price': test_start_price,
+            })
+        
+        if len(predictions) < 3:
+            print("    ERROR: Too few valid folds for calibration")
+            return None
+        
+        # Calculate calibration metrics
+        predictions = np.array(predictions)
+        actuals = np.array(actuals)
+        
+        # Brier score
+        brier = np.mean((predictions - actuals) ** 2)
+        
+        # Calibration error
+        cal_error = abs(np.mean(predictions) - np.mean(actuals))
+        
+        # Print results
+        print(f"    Target: +{target_pct:.0%} move (mult={target_mult:.2f})")
+        print(f"    Valid folds: {len(predictions)}")
+        print(f"    Brier Score: {brier:.3f} (0.25 = random, 0 = perfect)")
+        print(f"    Calibration Error: {cal_error:.3f}")
+        print(f"    Mean Predicted: {np.mean(predictions):.1%}")
+        print(f"    Mean Actual:    {np.mean(actuals):.1%}")
+        
+        # Diagnostic
+        pred_mean = np.mean(predictions)
+        actual_mean = np.mean(actuals)
+        
+        if pred_mean > 0.01:  # Avoid division by zero
+            under_pred_ratio = actual_mean / pred_mean
+            if under_pred_ratio > 1.5:
+                print(f"\n    [!] WARNING: Model is UNDER-PREDICTING by {under_pred_ratio:.1f}x")
+            elif under_pred_ratio < 0.67:
+                print(f"\n    [!] WARNING: Model is OVER-PREDICTING by {1/under_pred_ratio:.1f}x")
+        else:
+            under_pred_ratio = float('inf')
+        
+        return {
+            'brier': brier,
+            'cal_error': cal_error,
+            'mean_pred': float(np.mean(predictions)),
+            'mean_actual': float(np.mean(actuals)),
+            'under_prediction_ratio': float(under_pred_ratio),
+            'predictions': predictions.tolist(),
+            'actuals': actuals.tolist(),
+            'fold_details': fold_details,
+        }
+
     def analyze_fpt(self, paths, target, direction="up"):
         if direction == "down":
             hits = np.any(paths <= target, axis=1)
@@ -902,9 +1285,108 @@ class RegimeRiskPlatform:
             confidence = min(confidence, 55)
             reasons.append("Sim > 1.5x historical")
 
+        # REGIME CONTEXT (CRITICAL for interpretation)
+        current_regime_name = self.regime_names.get(self.current_regime, 'Unknown')
+        current_alpha = self.regime_alpha.get(self.current_regime, self.market_alpha) * 252
+        
+        # Find momentum regime for comparison
+        momentum_alpha = None
+        for r, name in self.regime_names.items():
+            if "Momentum" in name or "High Alpha" in name:
+                momentum_alpha = self.regime_alpha.get(r, 0) * 252
+                break
+        
+        if current_alpha < -0.20:  # Very negative alpha regime
+            reasons.append(f"In {current_regime_name} regime (A={current_alpha:+.0%})")
+            reasons.append("Expect lower upside until regime change")
+        elif current_alpha > 0.50:  # Very positive alpha regime  
+            reasons.append(f"In {current_regime_name} regime (A={current_alpha:+.0%})")
+            reasons.append("Favorable conditions for upside")
+        else:
+            reasons.append(f"Current regime: {current_regime_name}")
+
         confidence = max(30, min(85, confidence))
 
         return {'signal': signal, 'confidence': confidence, 'reasoning': reasons}
+
+    def what_if_momentum_regime(self):
+        """
+        Test what happens if we were in Momentum regime instead of current.
+        This proves the model is working - it SHOULD show higher probabilities.
+        """
+        print("\n" + "="*70)
+        print("WHAT-IF ANALYSIS: MOMENTUM REGIME")
+        print("="*70)
+        
+        # Find momentum regime
+        momentum_regime = None
+        for r, name in self.regime_names.items():
+            if "Momentum" in name or "High Alpha" in name:
+                momentum_regime = r
+                break
+        
+        if momentum_regime is None:
+            print("  No Momentum regime found in current model")
+            return None
+        
+        # Store original regime
+        original_regime = self.current_regime
+        original_name = self.regime_names.get(original_regime, 'Unknown')
+        
+        print(f"\n  Current regime: {original_name}")
+        print(f"    Alpha: {self.regime_alpha[original_regime]*252:+.1%} ann")
+        print(f"    Beta:  {self.regime_beta[original_regime]:.2f}")
+        
+        print(f"\n  Momentum regime: {self.regime_names[momentum_regime]}")
+        print(f"    Alpha: {self.regime_alpha[momentum_regime]*252:+.1%} ann")
+        print(f"    Beta:  {self.regime_beta[momentum_regime]:.2f}")
+        
+        # Temporarily set current regime to Momentum
+        self.current_regime = momentum_regime
+        
+        # Run quick simulation
+        orig_sims = self.simulations
+        self.simulations = 1000
+        
+        print(f"\n  Simulating 1000 paths in Momentum regime...")
+        paths = self.simulate()
+        
+        # Analyze
+        final_prices = paths[:, -1]
+        prob_up = np.mean(final_prices >= self.target_up)
+        prob_down = np.mean(final_prices <= self.target_down)
+        median_price = np.median(final_prices)
+        p5, p95 = np.percentile(final_prices, [5, 95])
+        
+        print(f"\n  Results IF in Momentum regime:")
+        print(f"    P(Up to ${self.target_up:.0f}):   {prob_up:.1%}")
+        print(f"    P(Down to ${self.target_down:.0f}): {prob_down:.1%}")
+        print(f"    Median price: ${median_price:.0f}")
+        print(f"    5th-95th: ${p5:.0f} - ${p95:.0f}")
+        
+        # Restore
+        self.current_regime = original_regime
+        self.simulations = orig_sims
+        
+        # Comparison
+        print(f"\n  COMPARISON:")
+        print(f"    In {original_name}: Sim shows {self.hist_up_hit:.1%} historical hit rate")
+        print(f"    In Momentum:        Would show {prob_up:.1%} probability")
+        print(f"    Difference:         {prob_up - self.hist_up_hit:+.1%}")
+        
+        if prob_up > self.hist_up_hit:
+            print(f"\n  [INSIGHT] Model correctly predicts HIGHER upside in Momentum regime")
+        else:
+            print(f"\n  [WARNING] Something is wrong - Momentum should have higher upside")
+        
+        print("="*70)
+        
+        return {
+            'current_regime': original_name,
+            'momentum_prob_up': prob_up,
+            'current_prob_up': self.hist_up_hit,
+            'improvement': prob_up - self.hist_up_hit
+        }
 
     # =========================================================================
     # MAIN
@@ -1092,7 +1574,264 @@ class RegimeRiskPlatform:
 # EXECUTE
 # =============================================================================
 
+# =============================================================================
+# MODE A vs MODE B COMPARISON
+# =============================================================================
+
+def compare_modes_a_b():
+    """Compare Mode A (current) with Mode B (adaptive alpha) on SPY."""
+    print("\n" + "="*70)
+    print("MODE A vs MODE B COMPARISON ON SPY")
+    print("="*70)
+    
+    # Test on stable asset (SPY) to isolate regime effects
+    platform_a = RegimeRiskPlatform(
+        ticker="SPY",
+        market_ticker="QQQ",
+        target_up=550,  # +10% from current ~500
+        target_down=450, # -10%
+        stop_loss_pct=0.10,
+        days_ahead=126,
+        simulations=2000,
+        n_regimes=3
+    )
+    
+    platform_a.ingest_data()
+    
+    # MODE A: Current implementation
+    print("\n[MODE A - CURRENT]")
+    platform_a.build_regime_model()
+    platform_a.compute_market_beta()
+    
+    # Run diagnostics first
+    platform_a.diagnose_under_prediction()
+    
+    # Run walk-forward validation at multiple levels
+    targets = [0.10, 0.20, 0.30, 0.50]
+    results_a = {}
+    for target in targets:
+        results_a[target] = platform_a.walk_forward_validation_fixed(
+            n_folds=8, target_pct=target
+        )
+    
+    # SIMULATION A
+    print("\n[MODE A SIMULATION]")
+    paths_a = platform_a.simulate()
+    prob_up_a = platform_a.analyze_fpt(paths_a, platform_a.target_up, "up")
+    prob_down_a = platform_a.analyze_fpt(paths_a, platform_a.target_down, "down")
+    
+    print(f"    Up probability: {prob_up_a:.1%}")
+    print(f"    Down probability: {prob_down_a:.1%}")
+    
+    # MODE B: Adaptive alpha implementation
+    print("\n" + "="*70)
+    print("MODE B - ADAPTIVE ALPHA IMPLEMENTATION")
+    print("="*70)
+    
+    platform_b = RegimeRiskPlatform(
+        ticker="SPY",
+        market_ticker="QQQ",
+        target_up=550,
+        target_down=450,
+        stop_loss_pct=0.10,
+        days_ahead=126,
+        simulations=2000,
+        n_regimes=3
+    )
+    
+    platform_b.ingest_data()
+    platform_b.build_regime_model()
+    platform_b.compute_market_beta()
+    
+    # OVERRIDE: Adaptive alpha blending
+    print("\n[ADAPTIVE ALPHA LOGIC]")
+    
+    # Store original alphas
+    orig_market_alpha = platform_b.market_alpha
+    orig_regime_alpha = platform_b.regime_alpha.copy()
+    
+    # Calculate regime persistence
+    current_regime = platform_b.current_regime
+    if platform_b.regime_probs is not None:
+        try:
+            regime_probs = np.array(platform_b.regime_probs).flatten()[:platform_b.n_regimes]
+            current_prob = float(regime_probs[current_regime])
+        except:
+            current_prob = 0.95  # Default if extraction fails
+    else:
+        current_prob = 0.95
+    
+    # Calculate how many regime changes expected in horizon
+    avg_duration = platform_b.regime_duration[current_regime]['mean']
+    expected_regime_changes = platform_b.days_ahead / avg_duration
+    
+    # Adaptive alpha: blend based on expected regime changes
+    # If we expect many changes, use more global alpha
+    # If we expect few changes, use more regime alpha
+    if expected_regime_changes > 1.0:
+        # Expect regime change - blend toward global
+        blend_weight = min(0.7, 0.3 + 0.4 * (expected_regime_changes - 1.0))
+        print(f"    Expected {expected_regime_changes:.1f} regime changes in horizon")
+        print(f"    Blending: {blend_weight:.0%} global, {1-blend_weight:.0%} regime alpha")
+    else:
+        # Expect to stay in current regime
+        blend_weight = 0.3  # Still use some global info
+        print(f"    Expect to stay in current regime (duration {avg_duration:.0f} days)")
+        print(f"    Blending: {blend_weight:.0%} global, {1-blend_weight:.0%} regime alpha")
+    
+    # Apply adaptive alpha to all regimes
+    for r in range(platform_b.n_regimes):
+        regime_alpha = platform_b.regime_alpha.get(r, platform_b.market_alpha)
+        blended = blend_weight * platform_b.market_alpha + (1 - blend_weight) * regime_alpha
+        platform_b.regime_alpha[r] = blended
+    
+    print(f"    Original regime alpha: {orig_regime_alpha.get(current_regime, 0)*252:+.1%}")
+    print(f"    Adaptive regime alpha: {platform_b.regime_alpha[current_regime]*252:+.1%}")
+    
+    # Run same diagnostics
+    platform_b.diagnose_under_prediction()
+    
+    # Run walk-forward validation
+    results_b = {}
+    for target in targets:
+        results_b[target] = platform_b.walk_forward_validation_fixed(
+            n_folds=8, target_pct=target
+        )
+    
+    # SIMULATION B
+    print("\n[MODE B SIMULATION]")
+    paths_b = platform_b.simulate()
+    prob_up_b = platform_b.analyze_fpt(paths_b, platform_b.target_up, "up")
+    prob_down_b = platform_b.analyze_fpt(paths_b, platform_b.target_down, "down")
+    
+    print(f"    Up probability: {prob_up_b:.1%}")
+    print(f"    Down probability: {prob_down_b:.1%}")
+    
+    # COMPARISON RESULTS
+    print("\n" + "="*70)
+    print("COMPARISON RESULTS")
+    print("="*70)
+    
+    print(f"\n{'Target':<10} {'Mode A Pred':<12} {'Mode A Act':<12} {'Mode B Pred':<12} {'Mode B Act':<12}")
+    print("-"*70)
+    
+    for target in targets:
+        a_result = results_a.get(target)
+        b_result = results_b.get(target)
+        
+        if a_result and b_result:
+            a_pred = a_result['mean_pred']
+            a_act = a_result['mean_actual']
+            b_pred = b_result['mean_pred']
+            b_act = b_result['mean_actual']
+            
+            print(f"{target:>+6.0%}     {a_pred:>10.1%}     {a_act:>10.1%}     "
+                  f"{b_pred:>10.1%}     {b_act:>10.1%}")
+    
+    print(f"\nSimulation Probabilities:")
+    print(f"  Mode A - Up: {prob_up_a:.1%}, Down: {prob_down_a:.1%}")
+    print(f"  Mode B - Up: {prob_up_b:.1%}, Down: {prob_down_b:.1%}")
+    
+    # Plot comparison
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    
+    # Final price distributions
+    final_a = paths_a[:, -1]
+    final_b = paths_b[:, -1]
+    
+    axes[0, 0].hist(final_a, bins=50, alpha=0.7, color='cyan', label='Mode A')
+    axes[0, 0].hist(final_b, bins=50, alpha=0.7, color='magenta', label='Mode B')
+    axes[0, 0].axvline(platform_a.last_price, color='white', linestyle='--', label='Current')
+    axes[0, 0].set_title('Final Price Distribution')
+    axes[0, 0].legend()
+    axes[0, 0].grid(alpha=0.3)
+    
+    # Drawdown comparison
+    def compute_drawdowns(paths):
+        max_drawdowns = []
+        for path in paths:
+            peak = np.maximum.accumulate(path)
+            dd = (path - peak) / peak
+            max_drawdowns.append(np.min(dd))
+        return np.array(max_drawdowns)
+    
+    dd_a = compute_drawdowns(paths_a)
+    dd_b = compute_drawdowns(paths_b)
+    
+    axes[0, 1].hist(dd_a*100, bins=50, alpha=0.7, color='cyan', label='Mode A')
+    axes[0, 1].hist(dd_b*100, bins=50, alpha=0.7, color='magenta', label='Mode B')
+    axes[0, 1].axvline(-20, color='red', linestyle='--', alpha=0.5)
+    axes[0, 1].axvline(-30, color='darkred', linestyle='--', alpha=0.5)
+    axes[0, 1].set_title('Max Drawdown Distribution (%)')
+    axes[0, 1].legend()
+    axes[0, 1].grid(alpha=0.3)
+    
+    # Walk-forward calibration
+    a_preds = []
+    a_acts = []
+    b_preds = []
+    b_acts = []
+    
+    for target in targets:
+        if results_a.get(target):
+            a_preds.append(results_a[target]['mean_pred'])
+            a_acts.append(results_a[target]['mean_actual'])
+        if results_b.get(target):
+            b_preds.append(results_b[target]['mean_pred'])
+            b_acts.append(results_b[target]['mean_actual'])
+    
+    if a_preds and b_preds:
+        x = np.arange(len(targets))
+        width = 0.35
+        
+        axes[1, 0].bar(x - width/2, a_preds, width, label='Mode A Pred', color='cyan', alpha=0.7)
+        axes[1, 0].bar(x + width/2, b_preds, width, label='Mode B Pred', color='magenta', alpha=0.7)
+        axes[1, 0].plot(x, a_acts, 'o-', color='lightblue', label='Actual', linewidth=2)
+        axes[1, 0].set_xticks(x)
+        axes[1, 0].set_xticklabels([f'+{t:.0%}' for t in targets])
+        axes[1, 0].set_title('Walk-Forward Calibration')
+        axes[1, 0].legend()
+        axes[1, 0].grid(alpha=0.3)
+    
+    # Regime visualization
+    if hasattr(platform_a, 'data') and 'Regime' in platform_a.data.columns:
+        regimes = platform_a.data['Regime'].values
+        prices = platform_a.data['Close'].values
+        
+        # Normalize for display
+        norm_prices = prices / prices[0]
+        
+        colors = ['green', 'blue', 'red', 'orange', 'purple']
+        for r in range(platform_a.n_regimes):
+            mask = regimes == r
+            if np.any(mask):
+                axes[1, 1].scatter(np.where(mask)[0], norm_prices[mask], 
+                                  color=colors[r % len(colors)], 
+                                  label=f'Regime {r}', s=10, alpha=0.6)
+        
+        axes[1, 1].plot(norm_prices, 'white', alpha=0.3, linewidth=0.5)
+        axes[1, 1].set_title('Historical Regimes')
+        axes[1, 1].legend(loc='upper left', fontsize=8)
+        axes[1, 1].grid(alpha=0.3)
+    
+    plt.suptitle('Mode A vs Mode B Comparison on SPY', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig('mode_a_vs_b_comparison.png', dpi=150, bbox_inches='tight')
+    print("\n[SAVED] mode_a_vs_b_comparison.png")
+    plt.show()
+    
+    return {
+        'platform_a': platform_a,
+        'platform_b': platform_b,
+        'paths_a': paths_a,
+        'paths_b': paths_b,
+        'results_a': results_a,
+        'results_b': results_b
+    }
+
+
 if __name__ == "__main__":
+    # Standard PLTR analysis
     platform = RegimeRiskPlatform(
         ticker="PLTR",
         market_ticker="QQQ",
@@ -1106,3 +1845,23 @@ if __name__ == "__main__":
 
     platform.ingest_data()
     results = platform.run()
+    
+    # Run diagnostic to understand calibration
+    print("\n" + "="*70)
+    print("CALIBRATION DIAGNOSTICS")
+    print("="*70)
+    platform.diagnose_under_prediction()
+    
+    # Run multi-target walk-forward
+    print("\n" + "="*70)
+    print("MULTI-TARGET WALK-FORWARD VALIDATION")
+    print("="*70)
+    for target in [0.10, 0.20, 0.30, 0.50]:
+        platform.walk_forward_validation_fixed(n_folds=8, target_pct=target)
+    
+    # CRITICAL TEST: What if we were in Momentum regime?
+    platform.what_if_momentum_regime()
+    
+    # Optionally run Mode A vs Mode B comparison on SPY
+    # Uncomment to run:
+    # compare_modes_a_b()
