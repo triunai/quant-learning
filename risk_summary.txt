@@ -1,6 +1,0 @@
-Signal: HOLD (50%)
-Reasoning:
-
-Stats:
-Prob Up: 65.0%
-Prob Down: 25.0%
