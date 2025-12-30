@@ -63,12 +63,13 @@
 
 ---
 
-## Architecture
+## Archive
 
-| Document | Description |
-|----------|-------------|
-| [ARCHITECTURE.md](architecture/ARCHITECTURE.md) | Clean Architecture for DCA Dashboard |
-| [DCA_DASHBOARD_AUDIT.md](architecture/DCA_DASHBOARD_AUDIT.md) | Dashboard engineering review |
+Archived documentation moved to `docs/archive/`:
+- `DCA(archived)/` - DCA Dashboard architecture (future project)
+- `v7_audit.md`, `v7_deep_dive.md` - Pre-bug-fix PLTR analysis
+- `SEMI_MARKOV_KNOWLEDGE_BASE.md` - Superseded by modules/SEMI_MARKOV.md
+- Test suite summaries - May be outdated
 
 ---
 
