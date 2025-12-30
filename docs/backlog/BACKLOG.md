@@ -1,8 +1,50 @@
 # 📋 Quant Platform Backlog
 
 > **Status:** Active  
-> **Last Updated:** 2026-04-01  
-> **Purpose:** Track critical engineering tasks for the Regime Risk Platform.
+> **Last Updated:** 2025-12-30  
+> **Purpose:** Track critical engineering tasks for the Regime Risk Platform.  
+> **Current Version:** v7.1 (Coherent Factor Model)
+
+---
+
+## ✅ Recently Completed (2025-12-30)
+
+### P0-E: Coherent Factor Model Fix ✅ COMPLETE
+**Problem:** Median alpha + asymmetric beta created non-zero mean residuals, causing under-prediction in high-alpha regimes.
+
+**Fix Applied:**
+- Standard OLS beta (not asymmetric)
+- Mean-based alpha (not median)
+- Zero-mean residuals enforced by construction
+- R² check for empirical sampling fallback
+
+**Validation:**
+- All regimes now have 0.0000% residual mean
+- What-if test: Momentum (61.9%) > Bear (45.4%) ✓
+- Drift decomposition error: 0.00%
+
+**Reference:** `docs/immediate-tasks/phases/phase-2-mode-a-fundamentals.md`
+
+---
+
+## 🔬 Research Discovery: Kurtosis-Persistence Relationship
+
+**Finding:** Cross-sectional analysis (22 stocks) revealed kurtosis predicts regime duration (r = +0.84).
+
+**Key Insight:** Fat-tail events CREATE persistent regimes (opposite of conventional wisdom).
+
+| Stock | Kurtosis | Avg Duration | Type |
+|-------|----------|--------------|------|
+| META | 26.6 | 119.5 days | Fat-Tail |
+| JPM | 5.0 | 59.8 days | Normal |
+| COIN | 2.6 | 18.1 days | Noise |
+
+**Next Steps:**
+- [ ] Implement stock classification (Fat-Tail vs Noise)
+- [ ] Adaptive n_regimes based on kurtosis
+- [ ] Anchor event detection algorithm
+
+**Reference:** `research/papers/kurtosis_regime_persistence/draft.md`
 
 ---
 

@@ -2,7 +2,29 @@
 
 This document consolidates validation workflows, moving from manual AI mentorship loops to automated pipelines.
 
+**Updated:** 2025-12-30 (Added v7.1 validation package)
+
 ---
+
+## 🚀 Quick Validation (Use This First!)
+
+Run the one-click validation package for immediate sanity checks:
+
+```bash
+# Full validation on any ticker
+python validation_package.py --ticker PLTR --market QQQ
+
+# Test on different stocks
+python validation_package.py --ticker MSFT --market QQQ
+python validation_package.py --ticker WMT --market SPY
+```
+
+**What it validates:**
+1. ✅ Zero-mean residuals for all regimes
+2. ✅ What-if test: Momentum > Bear probability
+3. ✅ Drift decomposition matches actual returns
+4. ✅ Kurtosis-persistence relationship
+5. ✅ Stock type classification
 
 ## 🏗️ Part 1: The "Crawl" Phase (Manual Human-AI Loop)
 

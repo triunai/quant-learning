@@ -1,7 +1,21 @@
-# Regime Risk Platform v7.0 Documentation
+# Regime Risk Platform v7.1 Documentation
 
 > **Location:** `battle-tested/PLTR-test-2.py`  
 > **Purpose:** Institutional-grade Monte Carlo risk platform with regime conditioning, factor models, and walk-forward validation.
+> **Updated:** 2025-12-30 (v7.1 - Coherent Factor Model Fix + Kurtosis Research)
+
+---
+
+## What's New in v7.1
+
+### 🔧 Bug Fixes
+1. **Coherent Factor Model** - Fixed non-zero mean residuals caused by median alpha + asymmetric beta
+2. **Zero-Mean Residuals** - Now enforced by construction using OLS
+
+### 🔬 Research Discoveries
+1. **Kurtosis-Persistence Relationship** - Fat-tail stocks have LONGER regimes (r = +0.84)
+2. **Stock Classification** - Stocks can be classified as Fat-Tail vs Noise for optimal regime detection
+3. **Anchor Event Hypothesis** - Extreme events create regime-defining boundaries
 
 ---
 
@@ -10,9 +24,9 @@
 The `RegimeRiskPlatform` is a comprehensive quant simulation engine that combines:
 
 - **GMM Regime Clustering** on slow features (not return buckets)
-- **Alpha/Beta Factor Model** with per-regime alphas
+- **Coherent Alpha/Beta Factor Model** with per-regime parameters and zero-mean residuals
 - **Semi-Markov Duration Modeling** for regime persistence
-- **Jump Diffusion** with VIX-conditioned probabilities
+- **Empirical Residual Sampling** (preserves fat tails)
 - **Full Risk Dashboard** (VaR, CVaR, Kelly, Max Drawdown)
 - **Walk-Forward Validation** (no future leakage)
 
@@ -29,21 +43,24 @@ The `RegimeRiskPlatform` is a comprehensive quant simulation engine that combine
 ├─────────────────────────────────────────────────────────────────┤
 │                   PHASE 2: REGIME MODEL                          │
 │  ├─ GMM Clustering (n_regimes=3 default)                        │
-│  ├─ Regime naming by volatility: Low Vol → Normal → Crisis      │
+│  ├─ Regime naming by Sharpe: Momentum → Bull → Neutral → Bear   │
 │  ├─ Per-regime μ, σ (return distributions)                      │
 │  ├─ Semi-Markov duration fitting                                │
 │  └─ Transition matrix (with Laplace smoothing)                  │
 ├─────────────────────────────────────────────────────────────────┤
-│                   PHASE 3: MACRO CONDITIONING                    │
-│  ├─ r = α_regime + β × r_market + ε                             │
-│  ├─ Per-regime alpha (critical for upside probability!)         │
-│  ├─ Idiosyncratic volatility                                    │
-│  └─ Empirical residual pools per regime                         │
+│                   PHASE 3: COHERENT FACTOR MODEL                 │
+│  ├─ r = α_regime + β_regime × r_market + ε                      │
+│  ├─ OLS Beta (not asymmetric - usable in simulation)            │
+│  ├─ Mean-based Alpha (guarantees zero-mean residuals)           │
+│  ├─ Per-regime α and β                                          │
+│  ├─ R² check: Fallback to empirical if factor model weak        │
+│  └─ Empirical residual pools per regime (fat tails preserved)   │
 ├─────────────────────────────────────────────────────────────────┤
 │                   PHASE 4: SIMULATION                            │
-│  ├─ Factor model returns: α_regime + β × r_market + ε_empirical │
+│  ├─ Check model type per regime (factor vs empirical)           │
+│  ├─ Factor: α_regime + β_regime × r_market + ε_empirical        │
+│  ├─ Empirical: Sample directly from historical regime returns   │
 │  ├─ Semi-Markov duration: expire → off-diagonal transition      │
-│  ├─ Length-biased initial duration sampling                     │
 │  └─ Market returns sampled from historical (fat tails)          │
 ├─────────────────────────────────────────────────────────────────┤
 │                   PHASE 5: RISK DASHBOARD                        │
@@ -77,29 +94,53 @@ self.gmm.fit(X_scaled)
 | Ret_20d | 20-day return | Momentum |
 | Drawdown | Peak-to-trough | Pain level |
 
-### 2. Alpha/Beta Factor Model
+### 2. Coherent Alpha/Beta Factor Model (v7.1 Fix)
 
-**Problem:** Pure regime-conditioned returns collapse upside probability because they ignore the asset's systematic outperformance.
+**Problem (v7.0):** Median alpha + asymmetric beta created non-zero mean residuals, causing under-prediction of high-alpha regimes.
 
-**Solution:** Decompose returns into:
-
-```
-r_asset = α_regime + β × r_market + ε
-```
+**Solution (v7.1):** Use standard OLS with mean-based alpha:
 
 ```python
-# OLS decomposition
-self.market_alpha = np.mean(asset_ret) - self.market_beta * np.mean(market_ret)
-
-# Per-regime alpha (even better!)
-for r in range(self.n_regimes):
-    mask = self.data['Regime'].values == r
-    r_asset = asset_ret[mask]
-    r_market = market_ret[mask]
-    self.regime_alpha[r] = np.mean(r_asset) - self.market_beta * np.mean(r_market)
+def compute_market_beta(self):
+    """Coherent factor model with guaranteed zero-mean residuals."""
+    
+    # 1. Standard OLS beta (not asymmetric)
+    cov_matrix = np.cov(asset_ret, market_ret)
+    self.market_beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+    
+    # 2. Alpha from MEAN (guarantees zero-mean residuals)
+    self.market_alpha = np.mean(asset_ret) - self.market_beta * np.mean(market_ret)
+    
+    # 3. Per-regime calculations
+    for r in range(self.n_regimes):
+        mask = self.data['Regime'].values == r
+        r_asset = asset_ret[mask]
+        r_market = market_ret[mask]
+        
+        # OLS for regime
+        beta = cov(r_asset, r_market)[0,1] / var(r_market)
+        alpha = mean(r_asset) - beta * mean(r_market)
+        
+        # Residuals (zero mean BY CONSTRUCTION)
+        residuals = r_asset - (alpha + beta * r_market)
+        residuals = residuals - mean(residuals)  # Enforce
+        
+        # R² check: If factor model explains < 5%, use empirical
+        r_squared = 1 - var(residuals) / var(r_asset)
+        if r_squared < 0.05:
+            self.regime_model_type[r] = "empirical"
+        else:
+            self.regime_model_type[r] = "factor"
 ```
 
-**Result:** PLTR's positive alpha is now captured, giving realistic upside probabilities.
+**Validation:**
+```
+Regime       Beta    Alpha      Resid Mean  Status
+--------------------------------------------------------
+Bear         1.59    -56.0%     +0.0000%    [OK]
+Crisis       1.92     -3.9%     -0.0000%    [OK]
+Momentum     1.80   +208.5%     +0.0000%    [OK]
+```
 
 ### 3. Empirical Residual Sampling
 
@@ -109,11 +150,12 @@ for r in range(self.n_regimes):
 
 ```python
 # In simulation loop
-residual_pool = self.regime_residuals.get(r, np.array([0]))
-epsilon = np.random.choice(residual_pool)  # Fat tails preserved!
-
-# Full factor model
-returns[s] = alpha + self.market_beta * market_ret + epsilon
+if model_type == "empirical":
+    returns[s] = np.random.choice(self.regime_returns[r])
+else:
+    residual_pool = self.regime_residuals.get(r)
+    epsilon = np.random.choice(residual_pool)  # Fat tails preserved!
+    returns[s] = alpha + beta * market_ret + epsilon
 ```
 
 ### 4. Semi-Markov with Length-Biased Sampling
@@ -124,7 +166,6 @@ returns[s] = alpha + self.market_beta * market_ret + epsilon
 
 ```python
 # Sample initial duration using length-biased distribution
-# (longer runs are more likely to be "observed in progress")
 weights = samples_array / samples_array.sum()
 full_duration = np.random.choice(samples_array, p=weights)
 remaining_duration[s] = np.random.randint(1, max(2, full_duration + 1))
@@ -136,23 +177,66 @@ probs = probs / probs.sum()
 new_r = np.random.choice(self.n_regimes, p=probs)
 ```
 
-### 5. Invariant Verification
+### 5. Regime Naming by Sharpe Ratio
 
-**Problem:** Simulators can drift without anyone noticing.
-
-**Solution:** Compare sim stats to historical after every run:
+**New in v7.1:** Regimes are named by economic characteristics, not arbitrary labels:
 
 ```python
-def verify_simulation_invariants(self, paths):
-    sim_mean = np.mean(sim_returns)
-    hist_mean = np.mean(hist_returns)
+def _compute_regime_names_by_sharpe(self):
+    """Assign meaningful names based on Sharpe ratio."""
+    # Sort regimes by Sharpe
+    # Sharpe > 1.5 → "Momentum"
+    # Sharpe > 0.5 → "Bull"  
+    # Sharpe < -0.5 → "Bear"
+    # Else → "Neutral"
+```
+
+---
+
+## Research Discovery: Kurtosis-Persistence Relationship
+
+### The Finding
+
+Cross-sectional analysis across 22 stocks revealed:
+
+| Metric | Correlation with Regime Duration |
+|--------|----------------------------------|
+| **Kurtosis** | **+0.837** |
+| Volatility | +0.078 |
+| Jump Frequency | -0.054 |
+
+**Interpretation:** Stocks with fat-tail distributions have LONGER regime durations, not shorter.
+
+### Evidence
+
+| Stock | Kurtosis | Avg Duration |
+|-------|----------|--------------|
+| META | 26.6 | 119.5 days |
+| JPM | 5.0 | 59.8 days |
+| COIN | 2.6 | 18.1 days |
+| TSLA | 2.5 | 15.7 days |
+
+### The "Anchor Event" Hypothesis
+
+Fat-tail events don't destabilize regimes—they **CREATE** them:
+- Rare, extreme moves serve as regime boundary markers
+- GMM detects clear separation before/after extreme events
+- Without another extreme event, regime persists
+
+Noise stocks (constant moderate moves) have regime churn because no single event is significant enough to anchor a regime.
+
+### Stock Classification
+
+```python
+def classify_stock_type(returns):
+    kurtosis = stats.kurtosis(returns)
     
-    mean_ok = abs(sim_mean - hist_mean) < 0.001
-    std_ok = abs(sim_std - hist_std) / hist_std < 0.3
-    skew_ok = abs(sim_skew - hist_skew) < 1.0
-    kurt_ok = abs(sim_kurt - hist_kurt) < 3.0
-    
-    # Print [OK] or [FAIL] for each metric
+    if kurtosis > 5.0:
+        return "Fat-Tail"   # Fewer regimes, event-driven
+    elif kurtosis < 2.5:
+        return "Noise"      # More regimes, pattern-driven
+    else:
+        return "Normal"
 ```
 
 ---
@@ -170,26 +254,16 @@ cvar_95 = np.mean(simple_returns[simple_returns <= var_95])
 
 ### Kelly Fraction with DD Penalty
 
-**Problem:** Binary Kelly doesn't apply to continuous returns, and ignores drawdown risk.
-
-**Solution:** Continuous Kelly with exponential DD penalty:
-
 ```python
 # Continuous Kelly: f* ~ μ/σ²
 raw_kelly = mu / (sigma ** 2)
 
-# Exponential DD penalty (smoother than linear)
+# Exponential DD penalty
 dd_penalty = np.exp(-3 * prob_dd_30)
 
 # Final: 0.5× fractional Kelly, capped at 25%
 kelly = max(0, min(0.25, raw_kelly * 0.5 * dd_penalty))
 ```
-
-| prob_dd_30 | DD Penalty | Effect |
-|------------|------------|--------|
-| 0% | 1.0 | Full Kelly |
-| 20% | 0.55 | Moderate reduction |
-| 40% | 0.30 | Aggressive reduction |
 
 ---
 
@@ -205,16 +279,6 @@ def walk_forward_validation(self, n_folds=5):
     # 3. Compare to actual outcome
     # 4. Compute Brier score
 ```
-
-### Multi-Threshold Calibration
-
-Test multiple targets and horizons:
-
-| Horizon | Threshold | Up Hit | Down Hit |
-|---------|-----------|--------|----------|
-| 21d (1mo) | +10% | 15% | 12% |
-| 63d (3mo) | +20% | 25% | 18% |
-| 126d (6mo) | +30% | 35% | 22% |
 
 ---
 
@@ -238,7 +302,7 @@ platform.ingest_data()
 # Build regime model
 platform.build_regime_model()
 
-# Macro conditioning (alpha + beta)
+# Macro conditioning (coherent factor model)
 platform.compute_market_beta()
 
 # VIX and anomaly detection
@@ -258,55 +322,49 @@ risk = platform.compute_risk_metrics(paths)
 print(f"VaR(95): {risk['var_95']*100:.1f}%")
 print(f"Kelly: {risk['kelly_fraction']:.0%}")
 
-# Historical validation
-platform.compute_historical_validation()
-
-# Full calibration suite
-platform.multi_threshold_calibration()
+# Validation
 platform.walk_forward_validation(n_folds=5)
 ```
 
 ---
 
-## Output: Risk Report
+## Validation Package
 
-```json
-{
-  "ticker": "PLTR",
-  "price": 78.50,
-  "regime": "Normal",
-  "beta": 1.85,
-  "signal": "LONG",
-  "confidence": 72,
-  "targets": {
-    "up": {"price": 117.75, "prob_sim": 0.42, "prob_hist": 0.38},
-    "down": {"price": 51.03, "prob_sim": 0.18, "prob_hist": 0.15}
-  },
-  "risk": {
-    "var_95": -0.28,
-    "cvar_95": -0.41,
-    "prob_dd_20": 0.35,
-    "prob_dd_30": 0.18,
-    "kelly_fraction": 0.15,
-    "win_rate": 0.58
-  }
-}
+Run the one-click validation:
+
+```bash
+python validation_package.py --ticker PLTR --market QQQ
 ```
+
+This validates:
+1. Zero-mean residuals for all regimes
+2. What-if test: Momentum > Bear probability
+3. Kurtosis-persistence relationship
+4. Stock type classification
 
 ---
 
 ## Known Limitations
 
-1. **Jump Diffusion Disabled** – Empirical sampling already captures fat tails; adding jumps would double-count.
-2. **Single-Asset** – No portfolio-level correlation/hedging.
-3. **No Options Overlay** – Pure delta-one simulation.
-4. **VIX Fetch Can Fail** – Defaults to 20 if unavailable.
+1. **Jump Diffusion Disabled** – Empirical sampling already captures fat tails
+2. **Single-Asset** – No portfolio-level correlation/hedging
+3. **No Options Overlay** – Pure delta-one simulation
+4. **Stock-Type Adaptation** – Manual; future version will auto-classify
 
 ---
 
-## Future Roadmap
+## Future Roadmap (v7.2+)
 
-1. **Streamlit Dashboard Integration** – `to_refine/dashboard.py` wraps this engine.
-2. **Multi-Asset Extension** – Correlated regime simulation.
-3. **Options Pricing** – Monte Carlo for exotic payoffs.
-4. **Live Trading Hooks** – Paper trading via broker API.
+1. **Automatic Stock Classification** – Use kurtosis on `ingest_data()`
+2. **Adaptive n_regimes** – Fewer for fat-tail, more for noise stocks
+3. **Anchor Event Detection** – Flag extreme events that define regime boundaries
+4. **Multi-Asset Extension** – Correlated regime simulation
+5. **Streamlit Dashboard** – `to_refine/dashboard.py` integration
+
+---
+
+## References
+
+- Session notes: `docs/sessions/2025-12-30-mode-a-fundamentals.md`
+- Research paper: `research/papers/kurtosis_regime_persistence/draft.md`
+- Implementation guide: `docs/implementation_guide_v71.md`

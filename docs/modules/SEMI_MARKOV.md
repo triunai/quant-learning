@@ -178,6 +178,28 @@ print(f"Vol clustering error: {report['vol_clustering_error']:.2f}")
 
 ---
 
+## Research Discovery: Kurtosis Predicts Duration
+
+**Finding (December 2024):** Cross-sectional analysis revealed that **return kurtosis predicts regime duration** with r = +0.84.
+
+| Stock | Kurtosis | Avg Duration |
+|-------|----------|--------------|
+| META | 26.6 | 119.5 days |
+| JPM | 5.0 | 59.8 days |
+| COIN | 2.6 | 18.1 days |
+
+**Interpretation:** Fat-tail events create "anchor points" that define regime boundaries. Stocks with rare but extreme moves have longer-lasting regimes. Stocks with constant moderate noise have regime churn.
+
+### Implications for Semi-Markov
+
+1. **Duration priors:** Use kurtosis to set initial duration distribution parameters
+2. **Stock classification:** Fat-tail vs Noise stocks need different n_states
+3. **Expected persistence:** High-kurtosis stocks should have longer expected durations
+
+See: `research/papers/kurtosis_regime_persistence/draft.md`
+
+---
+
 ## Future Improvements
 
 1. **Return state history from simulation** – Enable full duration validation.
