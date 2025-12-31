@@ -1,0 +1,3129 @@
+{
+  "results": [
+    {
+      "ticker": "AAPL",
+      "sector": "Large Cap Tech",
+      "kurtosis": 6.0444094266021935,
+      "volatility": 0.27488953446450887,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.20542517225126028,
+      "avg_duration": 13.895348837209303,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 35.0,
+          "std": 33.95585369269929,
+          "count": 6
+        },
+        "Momentum": {
+          "mean": 9.108108108108109,
+          "std": 9.123133007920279,
+          "count": 37
+        },
+        "Bear": {
+          "mean": 15.069767441860465,
+          "std": 21.453460011325554,
+          "count": 43
+        }
+      }
+    },
+    {
+      "ticker": "MSFT",
+      "sector": "Large Cap Tech",
+      "kurtosis": 3.1416732366143076,
+      "volatility": 0.25718849338567507,
+      "jump_freq": 1.00418410041841,
+      "vol_cluster": 0.052223953480283865,
+      "avg_duration": 10.042016806722689,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 16.88235294117647,
+          "std": 26.072032238625038,
+          "count": 17
+        },
+        "Momentum": {
+          "mean": 4.964912280701754,
+          "std": 6.161467449614272,
+          "count": 57
+        }
+      }
+    },
+    {
+      "ticker": "GOOGL",
+      "sector": "Large Cap Tech",
+      "kurtosis": 3.1782950805337364,
+      "volatility": 0.31059247614960217,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.05611152247678846,
+      "avg_duration": 14.058823529411764,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 16.464285714285715,
+          "std": 26.92646354008469,
+          "count": 28
+        },
+        "Momentum": {
+          "mean": 9.107142857142858,
+          "std": 8.260661015207154,
+          "count": 28
+        },
+        "Bull": {
+          "mean": 16.517241379310345,
+          "std": 22.132236887205757,
+          "count": 29
+        }
+      }
+    },
+    {
+      "ticker": "META",
+      "sector": "Large Cap Tech",
+      "kurtosis": 26.612941228187527,
+      "volatility": 0.44315604195114333,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.00765927206337865,
+      "avg_duration": 119.5,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Crisis": {
+          "mean": 20.0,
+          "std": 0.0,
+          "count": 2
+        },
+        "Bull": {
+          "mean": 103.25,
+          "std": 43.51651985166093,
+          "count": 4
+        }
+      }
+    },
+    {
+      "ticker": "AMZN",
+      "sector": "Large Cap Tech",
+      "kurtosis": 5.16170694982538,
+      "volatility": 0.35472390724556024,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.13400557631652837,
+      "avg_duration": 37.34375,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 84.44444444444444,
+          "std": 75.84356870282573,
+          "count": 9
+        },
+        "Neutral": {
+          "mean": 16.6875,
+          "std": 19.958452939794707,
+          "count": 16
+        },
+        "Low Alpha": {
+          "mean": 24.0,
+          "std": 23.603873774083294,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "NVDA",
+      "sector": "Large Cap Tech",
+      "kurtosis": 3.7409461535067354,
+      "volatility": 0.5194674712663565,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.04370368146034863,
+      "avg_duration": 17.318840579710145,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 14.607142857142858,
+          "std": 24.297764867391002,
+          "count": 28
+        },
+        "Bull": {
+          "mean": 48.375,
+          "std": 52.6045090747932,
+          "count": 8
+        },
+        "Momentum": {
+          "mean": 12.090909090909092,
+          "std": 14.625348763235733,
+          "count": 33
+        }
+      }
+    },
+    {
+      "ticker": "TSLA",
+      "sector": "Large Cap Tech",
+      "kurtosis": 2.5115803226196123,
+      "volatility": 0.5984102920385984,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.010257498698553686,
+      "avg_duration": 16.59722222222222,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Crisis": {
+          "mean": 18.65,
+          "std": 22.65673189142688,
+          "count": 20
+        },
+        "Momentum": {
+          "mean": 11.62962962962963,
+          "std": 14.524941889724131,
+          "count": 27
+        },
+        "Bull": {
+          "mean": 20.32,
+          "std": 29.708880827119692,
+          "count": 25
+        }
+      }
+    },
+    {
+      "ticker": "ORCL",
+      "sector": "Large Cap Tech",
+      "kurtosis": 28.020593593247984,
+      "volatility": 0.3822728357739583,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.040675522823283655,
+      "avg_duration": 47.8,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 70.54545454545455,
+          "std": 66.5983396412794,
+          "count": 11
+        },
+        "Bear": {
+          "mean": 27.416666666666668,
+          "std": 20.754350280255835,
+          "count": 12
+        }
+      }
+    },
+    {
+      "ticker": "CRM",
+      "sector": "Large Cap Tech",
+      "kurtosis": 10.060351148112371,
+      "volatility": 0.358106674359366,
+      "jump_freq": 1.5899581589958158,
+      "vol_cluster": 0.09759993729109019,
+      "avg_duration": 23.431372549019606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 18.227272727272727,
+          "std": 29.176472180947783,
+          "count": 22
+        },
+        "Bear": {
+          "mean": 15.44,
+          "std": 19.518360586893564,
+          "count": 25
+        }
+      }
+    },
+    {
+      "ticker": "ADBE",
+      "sector": "Large Cap Tech",
+      "kurtosis": 10.275847247220241,
+      "volatility": 0.3583256796517951,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.019980515207766295,
+      "avg_duration": 37.34375,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 14.076923076923077,
+          "std": 15.213665610291793,
+          "count": 13
+        },
+        "Bear": {
+          "mean": 46.22222222222222,
+          "std": 47.92999009615258,
+          "count": 9
+        },
+        "Neutral": {
+          "mean": 59.6,
+          "std": 68.1897352979171,
+          "count": 10
+        }
+      }
+    },
+    {
+      "ticker": "INTC",
+      "sector": "Large Cap Tech",
+      "kurtosis": 14.0656936254192,
+      "volatility": 0.46389193580354043,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.0739823774580203,
+      "avg_duration": 20.603448275862068,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 20.96551724137931,
+          "std": 35.73222515304125,
+          "count": 29
+        },
+        "Neutral": {
+          "mean": 71.33333333333333,
+          "std": 16.027753706895076,
+          "count": 3
+        },
+        "Bear": {
+          "mean": 14.346153846153847,
+          "std": 17.735107094930076,
+          "count": 26
+        }
+      }
+    },
+    {
+      "ticker": "AMD",
+      "sector": "Large Cap Tech",
+      "kurtosis": 3.7621857181588165,
+      "volatility": 0.5237643095245413,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.059321968382426295,
+      "avg_duration": 21.339285714285715,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 9.391304347826088,
+          "std": 7.075611083978559,
+          "count": 23
+        },
+        "Bear": {
+          "mean": 27.26923076923077,
+          "std": 41.57621147900257,
+          "count": 26
+        },
+        "Neutral": {
+          "mean": 38.57142857142857,
+          "std": 41.28596144266108,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "JPM",
+      "sector": "Financials",
+      "kurtosis": 4.976833230890167,
+      "volatility": 0.24227390138315144,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.1606210574320396,
+      "avg_duration": 59.75,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 94.75,
+          "std": 83.71790429770684,
+          "count": 8
+        },
+        "Bear": {
+          "mean": 35.57142857142857,
+          "std": 53.000962640468394,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "BAC",
+      "sector": "Financials",
+      "kurtosis": 3.8000052061997804,
+      "volatility": 0.26877826635164,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.183609936084307,
+      "avg_duration": 24.895833333333332,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 11.333333333333334,
+          "std": 10.498677165349081,
+          "count": 12
+        },
+        "Neutral": {
+          "mean": 32.40909090909091,
+          "std": 34.613002143058495,
+          "count": 22
+        },
+        "Bear": {
+          "mean": 24.714285714285715,
+          "std": 31.168731060445293,
+          "count": 14
+        }
+      }
+    },
+    {
+      "ticker": "GS",
+      "sector": "Financials",
+      "kurtosis": 5.300867980498767,
+      "volatility": 0.27160673627578247,
+      "jump_freq": 1.1715481171548117,
+      "vol_cluster": 0.16135739523746462,
+      "avg_duration": 13.735632183908047,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 11.975,
+          "std": 17.963139341440293,
+          "count": 40
+        },
+        "Momentum": {
+          "mean": 21.0,
+          "std": 21.85177338341216,
+          "count": 4
+        },
+        "Bull": {
+          "mean": 14.69767441860465,
+          "std": 20.41378340071252,
+          "count": 43
+        }
+      }
+    },
+    {
+      "ticker": "MS",
+      "sector": "Financials",
+      "kurtosis": 4.070773912125021,
+      "volatility": 0.282217997939726,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.14488519066945957,
+      "avg_duration": 25.425531914893618,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 32.26086956521739,
+          "std": 38.52635167202963,
+          "count": 23
+        },
+        "Bear": {
+          "mean": 24.0,
+          "std": 31.231851873185033,
+          "count": 14
+        },
+        "Momentum": {
+          "mean": 11.7,
+          "std": 10.733592129385205,
+          "count": 10
+        }
+      }
+    },
+    {
+      "ticker": "WFC",
+      "sector": "Financials",
+      "kurtosis": 3.5168346508618393,
+      "volatility": 0.3011901838579636,
+      "jump_freq": 1.7573221757322177,
+      "vol_cluster": 0.12022812465617828,
+      "avg_duration": 15.519480519480519,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 28.714285714285715,
+          "std": 28.83308756924083,
+          "count": 14
+        },
+        "Bear": {
+          "mean": 12.807692307692308,
+          "std": 21.529977724753973,
+          "count": 26
+        },
+        "Momentum": {
+          "mean": 12.432432432432432,
+          "std": 14.740164912606643,
+          "count": 37
+        }
+      }
+    },
+    {
+      "ticker": "C",
+      "sector": "Financials",
+      "kurtosis": 5.963052570594279,
+      "volatility": 0.2830072656098948,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.1604222360170111,
+      "avg_duration": 22.547169811320753,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 21.157894736842106,
+          "std": 31.77596436549708,
+          "count": 19
+        },
+        "Bear": {
+          "mean": 15.777777777777779,
+          "std": 18.124739248869382,
+          "count": 18
+        }
+      }
+    },
+    {
+      "ticker": "BLK",
+      "sector": "Financials",
+      "kurtosis": 5.499145132780384,
+      "volatility": 0.26069996157858444,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.10658411149450914,
+      "avg_duration": 22.98076923076923,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 19.08,
+          "std": 25.477707903184697,
+          "count": 25
+        },
+        "Neutral": {
+          "mean": 149.0,
+          "std": 85.0,
+          "count": 2
+        },
+        "Bull": {
+          "mean": 16.8,
+          "std": 14.945233353815524,
+          "count": 25
+        }
+      }
+    },
+    {
+      "ticker": "SCHW",
+      "sector": "Financials",
+      "kurtosis": 6.586283214198804,
+      "volatility": 0.3250163749897937,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.38821206690570637,
+      "avg_duration": 14.397590361445783,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 12.1875,
+          "std": 16.202695570490732,
+          "count": 32
+        },
+        "Neutral": {
+          "mean": 14.585365853658537,
+          "std": 15.026765729217491,
+          "count": 41
+        },
+        "Bear": {
+          "mean": 20.7,
+          "std": 23.207972767995052,
+          "count": 10
+        }
+      }
+    },
+    {
+      "ticker": "AXP",
+      "sector": "Financials",
+      "kurtosis": 5.270486648318938,
+      "volatility": 0.2912599676302504,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.109678002358141,
+      "avg_duration": 26.555555555555557,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 48.142857142857146,
+          "std": 61.814072765323715,
+          "count": 14
+        },
+        "Bear": {
+          "mean": 17.25,
+          "std": 15.654472204453269,
+          "count": 16
+        }
+      }
+    },
+    {
+      "ticker": "USB",
+      "sector": "Financials",
+      "kurtosis": 3.8977867080597193,
+      "volatility": 0.3001482141371879,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.20988255060399247,
+      "avg_duration": 41.206896551724135,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 15.727272727272727,
+          "std": 17.220975102214,
+          "count": 11
+        },
+        "Neutral": {
+          "mean": 83.63636363636364,
+          "std": 116.07385793479843,
+          "count": 11
+        },
+        "Bear": {
+          "mean": 14.571428571428571,
+          "std": 19.90590108382898,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "WMT",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 13.003668776775452,
+      "volatility": 0.2090563807517779,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.16332775361328133,
+      "avg_duration": 18.384615384615383,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 22.96551724137931,
+          "std": 32.78717448850019,
+          "count": 29
+        },
+        "Neutral": {
+          "mean": 36.666666666666664,
+          "std": 21.29684379328438,
+          "count": 3
+        },
+        "Bear": {
+          "mean": 12.696969696969697,
+          "std": 15.288111539808545,
+          "count": 33
+        }
+      }
+    },
+    {
+      "ticker": "TGT",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 35.191748132105424,
+      "volatility": 0.36191303291154425,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.022474183602031936,
+      "avg_duration": 30.641025641025642,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 22.666666666666668,
+          "std": 22.50432057282433,
+          "count": 18
+        },
+        "Bear": {
+          "mean": 38.411764705882355,
+          "std": 59.70423063493359,
+          "count": 17
+        },
+        "Crisis": {
+          "mean": 33.5,
+          "std": 15.960889699512368,
+          "count": 4
+        }
+      }
+    },
+    {
+      "ticker": "COST",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 9.361166609449306,
+      "volatility": 0.22750413669918812,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.021104602568677834,
+      "avg_duration": 91.92307692307692,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 57.166666666666664,
+          "std": 38.242283172193346,
+          "count": 6
+        },
+        "Bull": {
+          "mean": 41.0,
+          "std": 0.0,
+          "count": 1
+        }
+      }
+    },
+    {
+      "ticker": "HD",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 3.364382332174591,
+      "volatility": 0.237472077548306,
+      "jump_freq": 1.00418410041841,
+      "vol_cluster": 0.008684489811172508,
+      "avg_duration": 20.603448275862068,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 18.48,
+          "std": 19.2377129617842,
+          "count": 25
+        },
+        "Neutral": {
+          "mean": 48.0,
+          "std": 18.89973544788392,
+          "count": 5
+        },
+        "Bear": {
+          "mean": 17.607142857142858,
+          "std": 22.353234482658983,
+          "count": 28
+        }
+      }
+    },
+    {
+      "ticker": "NKE",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 16.022975022787715,
+      "volatility": 0.3542883125894942,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.014324970120017006,
+      "avg_duration": 39.833333333333336,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 22.2,
+          "std": 23.32295007069217,
+          "count": 10
+        },
+        "Neutral": {
+          "mean": 82.4,
+          "std": 74.65949370307838,
+          "count": 10
+        },
+        "Bear": {
+          "mean": 14.9,
+          "std": 9.802550688468791,
+          "count": 10
+        }
+      }
+    },
+    {
+      "ticker": "SBUX",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 21.52649993078166,
+      "volatility": 0.3103763196750699,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.0317691865893461,
+      "avg_duration": 29.875,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 35.833333333333336,
+          "std": 28.43364595373274,
+          "count": 6
+        },
+        "Bear": {
+          "mean": 40.53333333333333,
+          "std": 35.80105522963752,
+          "count": 15
+        },
+        "Bull": {
+          "mean": 19.57894736842105,
+          "std": 22.06286661117483,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "MCD",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 2.485889133148567,
+      "volatility": 0.17111043268747947,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.033942804000080554,
+      "avg_duration": 17.83582089552239,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 18.0,
+          "std": 18.334848422244093,
+          "count": 12
+        },
+        "Bear": {
+          "mean": 12.0625,
+          "std": 20.15864811315481,
+          "count": 32
+        }
+      }
+    },
+    {
+      "ticker": "LOW",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 2.5368603732994703,
+      "volatility": 0.2565292948869343,
+      "jump_freq": 1.1715481171548117,
+      "vol_cluster": 0.09461882574765042,
+      "avg_duration": 16.830985915492956,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 25.307692307692307,
+          "std": 34.06189979656859,
+          "count": 13
+        },
+        "Bear": {
+          "mean": 14.875,
+          "std": 21.848555444239327,
+          "count": 24
+        },
+        "Bull": {
+          "mean": 14.970588235294118,
+          "std": 19.205522021662613,
+          "count": 34
+        }
+      }
+    },
+    {
+      "ticker": "TJX",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 2.77273063105544,
+      "volatility": 0.22466845106015917,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.11859923491501569,
+      "avg_duration": 23.9,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 16.1,
+          "std": 29.90300988195001,
+          "count": 20
+        },
+        "Neutral": {
+          "mean": 91.83333333333333,
+          "std": 107.95588090614714,
+          "count": 6
+        },
+        "Bull": {
+          "mean": 13.416666666666666,
+          "std": 18.34601833883551,
+          "count": 24
+        }
+      }
+    },
+    {
+      "ticker": "BKNG",
+      "sector": "Consumer Discretionary",
+      "kurtosis": 3.219636816421663,
+      "volatility": 0.3129750981766021,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.1255592039053278,
+      "avg_duration": 17.071428571428573,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 14.485714285714286,
+          "std": 18.789619365978847,
+          "count": 35
+        },
+        "Low Alpha": {
+          "mean": 21.2,
+          "std": 23.70569551816609,
+          "count": 10
+        },
+        "Bull": {
+          "mean": 19.04,
+          "std": 22.660061782793093,
+          "count": 25
+        }
+      }
+    },
+    {
+      "ticker": "PG",
+      "sector": "Consumer Staples",
+      "kurtosis": 3.4854499398147167,
+      "volatility": 0.1732866123957964,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.10300706299519442,
+      "avg_duration": 16.59722222222222,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 12.566666666666666,
+          "std": 15.054751926071567,
+          "count": 30
+        },
+        "Neutral": {
+          "mean": 27.333333333333332,
+          "std": 45.21491887517757,
+          "count": 12
+        },
+        "Bull": {
+          "mean": 16.333333333333332,
+          "std": 16.77763061009775,
+          "count": 30
+        }
+      }
+    },
+    {
+      "ticker": "KO",
+      "sector": "Consumer Staples",
+      "kurtosis": 4.332995445591719,
+      "volatility": 0.15706801540220144,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.07973407353287801,
+      "avg_duration": 13.735632183908047,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 13.357142857142858,
+          "std": 22.10992174241651,
+          "count": 42
+        },
+        "Bull": {
+          "mean": 17.68421052631579,
+          "std": 25.47455413912592,
+          "count": 19
+        },
+        "Bear": {
+          "mean": 11.461538461538462,
+          "std": 16.525576375915396,
+          "count": 26
+        }
+      }
+    },
+    {
+      "ticker": "PEP",
+      "sector": "Consumer Staples",
+      "kurtosis": 3.785770769594146,
+      "volatility": 0.1786288800065562,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.07634461340605937,
+      "avg_duration": 17.83582089552239,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 33.5,
+          "std": 57.48260606479146,
+          "count": 18
+        },
+        "Low Alpha": {
+          "mean": 11.0,
+          "std": 18.514389233665046,
+          "count": 23
+        },
+        "Bull": {
+          "mean": 13.038461538461538,
+          "std": 19.4154592830455,
+          "count": 26
+        }
+      }
+    },
+    {
+      "ticker": "PM",
+      "sector": "Consumer Staples",
+      "kurtosis": 8.37054510998842,
+      "volatility": 0.21498786637168618,
+      "jump_freq": 1.1715481171548117,
+      "vol_cluster": 0.012201306841694496,
+      "avg_duration": 22.547169811320753,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 43.57142857142857,
+          "std": 60.808498331958134,
+          "count": 14
+        },
+        "Bear": {
+          "mean": 11.608695652173912,
+          "std": 13.554204001886784,
+          "count": 23
+        }
+      }
+    },
+    {
+      "ticker": "MO",
+      "sector": "Consumer Staples",
+      "kurtosis": 10.72279178301092,
+      "volatility": 0.20374777464116944,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.0372474263054214,
+      "avg_duration": 21.339285714285715,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 31.296296296296298,
+          "std": 60.141077854839274,
+          "count": 27
+        },
+        "Bear": {
+          "mean": 10.5,
+          "std": 14.700583078815033,
+          "count": 28
+        },
+        "Neutral": {
+          "mean": 56.0,
+          "std": 0.0,
+          "count": 1
+        }
+      }
+    },
+    {
+      "ticker": "CL",
+      "sector": "Consumer Staples",
+      "kurtosis": 2.1646849682461156,
+      "volatility": 0.1789586513377796,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.08481316205159965,
+      "avg_duration": 13.579545454545455,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 13.133333333333333,
+          "std": 15.679569155078493,
+          "count": 30
+        },
+        "Bear": {
+          "mean": 12.324324324324325,
+          "std": 22.627481562046622,
+          "count": 37
+        },
+        "Neutral": {
+          "mean": 16.428571428571427,
+          "std": 25.434456247890388,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "KMB",
+      "sector": "Consumer Staples",
+      "kurtosis": 23.34592529003343,
+      "volatility": 0.19878684443130426,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.024480232850946665,
+      "avg_duration": 21.727272727272727,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 13.11111111111111,
+          "std": 18.162503770402264,
+          "count": 27
+        },
+        "Bear": {
+          "mean": 40.0,
+          "std": 0.0,
+          "count": 1
+        },
+        "Neutral": {
+          "mean": 29.666666666666668,
+          "std": 44.53962031470158,
+          "count": 27
+        }
+      }
+    },
+    {
+      "ticker": "GIS",
+      "sector": "Consumer Staples",
+      "kurtosis": 2.946096631603428,
+      "volatility": 0.20293334092582188,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.030070525127248098,
+      "avg_duration": 20.603448275862068,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 23.0,
+          "std": 24.599651565476638,
+          "count": 28
+        },
+        "Bear": {
+          "mean": 32.142857142857146,
+          "std": 41.47091432189406,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "K",
+      "sector": "Consumer Staples",
+      "kurtosis": 28.63356173824003,
+      "volatility": 0.1888689425102227,
+      "jump_freq": 1.015228426395939,
+      "vol_cluster": 0.004704270990585221,
+      "avg_duration": 131.33333333333334,
+      "n_observations": 1182,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-10",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 54.5,
+          "std": 57.97197598840322,
+          "count": 4
+        },
+        "Momentum": {
+          "mean": 60.0,
+          "std": 0.0,
+          "count": 1
+        },
+        "Low Alpha": {
+          "mean": 226.0,
+          "std": 355.81385582914,
+          "count": 4
+        }
+      }
+    },
+    {
+      "ticker": "CAG",
+      "sector": "Consumer Staples",
+      "kurtosis": 4.687083056829895,
+      "volatility": 0.22216235505926016,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.024623106211730528,
+      "avg_duration": 25.97826086956522,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 43.55555555555556,
+          "std": 53.27728536442589,
+          "count": 9
+        },
+        "Bull": {
+          "mean": 19.85,
+          "std": 17.16471671773234,
+          "count": 20
+        }
+      }
+    },
+    {
+      "ticker": "JNJ",
+      "sector": "Healthcare",
+      "kurtosis": 5.457397252798687,
+      "volatility": 0.16676306527346998,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.04082251088693759,
+      "avg_duration": 12.31958762886598,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 12.9,
+          "std": 16.57528280301727,
+          "count": 40
+        },
+        "Neutral": {
+          "mean": 8.972222222222221,
+          "std": 11.933813098156365,
+          "count": 36
+        },
+        "Bear": {
+          "mean": 16.952380952380953,
+          "std": 22.931525794927968,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "PFE",
+      "sector": "Healthcare",
+      "kurtosis": 2.749630177553695,
+      "volatility": 0.25494143691323273,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.09690173856241094,
+      "avg_duration": 18.106060606060606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "High Alpha": {
+          "mean": 15.307692307692308,
+          "std": 25.75441594811271,
+          "count": 13
+        },
+        "Bear": {
+          "mean": 10.851851851851851,
+          "std": 14.78914442646839,
+          "count": 27
+        },
+        "Neutral": {
+          "mean": 27.03846153846154,
+          "std": 26.14380463341285,
+          "count": 26
+        }
+      }
+    },
+    {
+      "ticker": "UNH",
+      "sector": "Healthcare",
+      "kurtosis": 35.868658234785684,
+      "volatility": 0.307646232196993,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.04849232860991233,
+      "avg_duration": 12.070707070707071,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 13.270833333333334,
+          "std": 20.197709836486137,
+          "count": 48
+        },
+        "Crisis": {
+          "mean": 26.25,
+          "std": 31.267994818983837,
+          "count": 4
+        },
+        "Bull": {
+          "mean": 9.638297872340425,
+          "std": 13.105830328221222,
+          "count": 47
+        }
+      }
+    },
+    {
+      "ticker": "ABBV",
+      "sector": "Healthcare",
+      "kurtosis": 10.565687510615387,
+      "volatility": 0.22485832018219792,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.029057478108818192,
+      "avg_duration": 24.387755102040817,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 28.75,
+          "std": 22.587330519563395,
+          "count": 4
+        },
+        "Bull": {
+          "mean": 28.142857142857142,
+          "std": 33.62862402391,
+          "count": 21
+        },
+        "Low Alpha": {
+          "mean": 20.375,
+          "std": 24.260414430370584,
+          "count": 24
+        }
+      }
+    },
+    {
+      "ticker": "MRK",
+      "sector": "Healthcare",
+      "kurtosis": 7.833765379417587,
+      "volatility": 0.23357101232948277,
+      "jump_freq": 1.8410041841004186,
+      "vol_cluster": 0.07534330011263236,
+      "avg_duration": 36.21212121212121,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 18.333333333333332,
+          "std": 15.376750126227728,
+          "count": 9
+        },
+        "Bull": {
+          "mean": 15.25,
+          "std": 12.60208316112856,
+          "count": 16
+        },
+        "Neutral": {
+          "mean": 98.25,
+          "std": 202.42637550477457,
+          "count": 8
+        }
+      }
+    },
+    {
+      "ticker": "LLY",
+      "sector": "Healthcare",
+      "kurtosis": 9.254722117568587,
+      "volatility": 0.3138630228468988,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.033291714768776653,
+      "avg_duration": 14.226190476190476,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 12.829268292682928,
+          "std": 18.774531839864018,
+          "count": 41
+        },
+        "Bull": {
+          "mean": 41.333333333333336,
+          "std": 26.398653164297777,
+          "count": 3
+        },
+        "Momentum": {
+          "mean": 13.625,
+          "std": 14.765987098734714,
+          "count": 40
+        }
+      }
+    },
+    {
+      "ticker": "BMY",
+      "sector": "Healthcare",
+      "kurtosis": 6.6912967059451045,
+      "volatility": 0.23548745461276943,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.038451576717643196,
+      "avg_duration": 30.641025641025642,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 15.384615384615385,
+          "std": 22.503122728732087,
+          "count": 13
+        },
+        "Bull": {
+          "mean": 20.705882352941178,
+          "std": 24.482321847508313,
+          "count": 17
+        },
+        "Neutral": {
+          "mean": 71.44444444444444,
+          "std": 81.7884956744612,
+          "count": 9
+        }
+      }
+    },
+    {
+      "ticker": "TMO",
+      "sector": "Healthcare",
+      "kurtosis": 3.445084258770132,
+      "volatility": 0.263871504937103,
+      "jump_freq": 1.5899581589958158,
+      "vol_cluster": 0.16290593423923388,
+      "avg_duration": 66.38888888888889,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 18.833333333333332,
+          "std": 14.040615687671567,
+          "count": 6
+        },
+        "Low Alpha": {
+          "mean": 143.16666666666666,
+          "std": 200.4706268315192,
+          "count": 6
+        },
+        "Bull": {
+          "mean": 37.166666666666664,
+          "std": 42.74504519694522,
+          "count": 6
+        }
+      }
+    },
+    {
+      "ticker": "DHR",
+      "sector": "Healthcare",
+      "kurtosis": 4.170132446581251,
+      "volatility": 0.2774609154396572,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.09151789116599332,
+      "avg_duration": 15.723684210526315,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 11.935483870967742,
+          "std": 16.644161010204474,
+          "count": 31
+        },
+        "Bull": {
+          "mean": 16.125,
+          "std": 21.76256820781959,
+          "count": 16
+        }
+      }
+    },
+    {
+      "ticker": "AMGN",
+      "sector": "Healthcare",
+      "kurtosis": 6.432565497806069,
+      "volatility": 0.23419482465417168,
+      "jump_freq": 1.7573221757322177,
+      "vol_cluster": 0.06452420264860237,
+      "avg_duration": 13.426966292134832,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 12.266666666666667,
+          "std": 13.728154363286503,
+          "count": 30
+        },
+        "Bull": {
+          "mean": 11.12,
+          "std": 14.032305583901742,
+          "count": 25
+        },
+        "Bear": {
+          "mean": 16.147058823529413,
+          "std": 19.650074618839277,
+          "count": 34
+        }
+      }
+    },
+    {
+      "ticker": "XOM",
+      "sector": "Energy",
+      "kurtosis": 1.5242385259538986,
+      "volatility": 0.26451700362929215,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.14645953067622267,
+      "avg_duration": 17.071428571428573,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 14.233333333333333,
+          "std": 20.165454509024975,
+          "count": 30
+        },
+        "Bull": {
+          "mean": 16.46153846153846,
+          "std": 25.52409234313394,
+          "count": 13
+        }
+      }
+    },
+    {
+      "ticker": "CVX",
+      "sector": "Energy",
+      "kurtosis": 3.2536516880814608,
+      "volatility": 0.2504979769108387,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.20832775282075056,
+      "avg_duration": 21.727272727272727,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 17.76923076923077,
+          "std": 19.52967700766371,
+          "count": 26
+        },
+        "Bull": {
+          "mean": 33.0,
+          "std": 45.13175157247944,
+          "count": 16
+        },
+        "Neutral": {
+          "mean": 15.76923076923077,
+          "std": 10.627640639489565,
+          "count": 13
+        }
+      }
+    },
+    {
+      "ticker": "COP",
+      "sector": "Energy",
+      "kurtosis": 3.0792548005314853,
+      "volatility": 0.3292528957221017,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.2629579185259543,
+      "avg_duration": 12.98913043478261,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 12.117647058823529,
+          "std": 20.34954068838837,
+          "count": 17
+        },
+        "Neutral": {
+          "mean": 21.94736842105263,
+          "std": 35.897476357875995,
+          "count": 38
+        },
+        "Momentum": {
+          "mean": 4.1891891891891895,
+          "std": 3.868359788165255,
+          "count": 37
+        }
+      }
+    },
+    {
+      "ticker": "SLB",
+      "sector": "Energy",
+      "kurtosis": 2.558110625282408,
+      "volatility": 0.3788179462779386,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.158993308396544,
+      "avg_duration": 23.431372549019606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 15.956521739130435,
+          "std": 17.713856675960884,
+          "count": 23
+        },
+        "Neutral": {
+          "mean": 79.85714285714286,
+          "std": 143.95180599415758,
+          "count": 7
+        },
+        "Bear": {
+          "mean": 12.80952380952381,
+          "std": 20.14854135715193,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "EOG",
+      "sector": "Energy",
+      "kurtosis": 2.313770834953681,
+      "volatility": 0.33561617032956326,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.18144003921212687,
+      "avg_duration": 25.425531914893618,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 14.947368421052632,
+          "std": 20.861633594536336,
+          "count": 19
+        },
+        "Neutral": {
+          "mean": 80.14285714285714,
+          "std": 114.13704615996707,
+          "count": 7
+        },
+        "Bull": {
+          "mean": 16.666666666666668,
+          "std": 23.703191132024184,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "OXY",
+      "sector": "Energy",
+      "kurtosis": 3.7994298194954954,
+      "volatility": 0.4002908902243143,
+      "jump_freq": 1.5899581589958158,
+      "vol_cluster": 0.13888187270932495,
+      "avg_duration": 29.875,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 16.68421052631579,
+          "std": 20.4709103790025,
+          "count": 19
+        },
+        "Neutral": {
+          "mean": 332.0,
+          "std": 209.0,
+          "count": 2
+        },
+        "Momentum": {
+          "mean": 11.263157894736842,
+          "std": 13.194265521781793,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "MPC",
+      "sector": "Energy",
+      "kurtosis": 3.390421501113744,
+      "volatility": 0.3243636634920082,
+      "jump_freq": 0.8368200836820083,
+      "vol_cluster": 0.14265324163352042,
+      "avg_duration": 24.387755102040817,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 17.545454545454547,
+          "std": 16.82186691813873,
+          "count": 11
+        },
+        "Bull": {
+          "mean": 43.55,
+          "std": 61.35183371342701,
+          "count": 20
+        }
+      }
+    },
+    {
+      "ticker": "VLO",
+      "sector": "Energy",
+      "kurtosis": 2.671147338205863,
+      "volatility": 0.36507600216039876,
+      "jump_freq": 1.00418410041841,
+      "vol_cluster": 0.15150887716641154,
+      "avg_duration": 17.83582089552239,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 23.727272727272727,
+          "std": 35.06035724486762,
+          "count": 33
+        },
+        "Momentum": {
+          "mean": 10.375,
+          "std": 11.663913365590469,
+          "count": 32
+        },
+        "Bull": {
+          "mean": 40.0,
+          "std": 15.0,
+          "count": 2
+        }
+      }
+    },
+    {
+      "ticker": "PSX",
+      "sector": "Energy",
+      "kurtosis": 3.4632862771947597,
+      "volatility": 0.33099039347470255,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.19245534421829835,
+      "avg_duration": 28.452380952380953,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 13.777777777777779,
+          "std": 13.214283330949783,
+          "count": 9
+        },
+        "Bear": {
+          "mean": 14.357142857142858,
+          "std": 19.579899105449748,
+          "count": 14
+        },
+        "Neutral": {
+          "mean": 45.78947368421053,
+          "std": 67.7748431416915,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "HAL",
+      "sector": "Energy",
+      "kurtosis": 2.5365430267938534,
+      "volatility": 0.4054108136284254,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.17776336415810262,
+      "avg_duration": 23.431372549019606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 19.24,
+          "std": 22.747799893616087,
+          "count": 25
+        },
+        "Bear": {
+          "mean": 15.80952380952381,
+          "std": 21.40231195259287,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "CAT",
+      "sector": "Industrials",
+      "kurtosis": 3.859079775338401,
+      "volatility": 0.29096951993461445,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.05262018174110327,
+      "avg_duration": 16.830985915492956,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 21.666666666666668,
+          "std": 26.560727065015033,
+          "count": 24
+        },
+        "Momentum": {
+          "mean": 12.0625,
+          "std": 15.29488783057921,
+          "count": 32
+        },
+        "Bull": {
+          "mean": 19.266666666666666,
+          "std": 17.763132856815798,
+          "count": 15
+        }
+      }
+    },
+    {
+      "ticker": "BA",
+      "sector": "Industrials",
+      "kurtosis": 3.687812250968485,
+      "volatility": 0.3643284665204542,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.11075581197355673,
+      "avg_duration": 20.25423728813559,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 14.125,
+          "std": 17.87762218529075,
+          "count": 16
+        },
+        "Neutral": {
+          "mean": 38.705882352941174,
+          "std": 49.963239081504426,
+          "count": 17
+        },
+        "Bear": {
+          "mean": 11.961538461538462,
+          "std": 17.546598989396053,
+          "count": 26
+        }
+      }
+    },
+    {
+      "ticker": "GE",
+      "sector": "Industrials",
+      "kurtosis": 4.208809584929284,
+      "volatility": 0.30049834444831336,
+      "jump_freq": 1.7573221757322177,
+      "vol_cluster": 0.07428838142825299,
+      "avg_duration": 11.831683168316832,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 14.515151515151516,
+          "std": 32.02851117375496,
+          "count": 33
+        },
+        "Bear": {
+          "mean": 14.947368421052632,
+          "std": 15.202055554259505,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "HON",
+      "sector": "Industrials",
+      "kurtosis": 5.0865482245191505,
+      "volatility": 0.21263151208295686,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.10897481610791968,
+      "avg_duration": 17.83582089552239,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 10.28125,
+          "std": 11.247873062828367,
+          "count": 32
+        },
+        "Neutral": {
+          "mean": 25.612903225806452,
+          "std": 50.091321390716516,
+          "count": 31
+        },
+        "Bull": {
+          "mean": 18.0,
+          "std": 14.300349646075091,
+          "count": 4
+        }
+      }
+    },
+    {
+      "ticker": "UPS",
+      "sector": "Industrials",
+      "kurtosis": 13.35146763367172,
+      "volatility": 0.2846277815460264,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.017647179471283643,
+      "avg_duration": 19.916666666666668,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 28.9,
+          "std": 19.78863310084858,
+          "count": 20
+        },
+        "Bear": {
+          "mean": 15.294117647058824,
+          "std": 13.576643897354417,
+          "count": 17
+        },
+        "Bull": {
+          "mean": 15.521739130434783,
+          "std": 14.138659813548506,
+          "count": 23
+        }
+      }
+    },
+    {
+      "ticker": "DE",
+      "sector": "Industrials",
+      "kurtosis": 6.085113849778711,
+      "volatility": 0.28400770697940975,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.12813882914278854,
+      "avg_duration": 18.671875,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 20.133333333333333,
+          "std": 24.1519265392133,
+          "count": 30
+        },
+        "Bull": {
+          "mean": 18.22222222222222,
+          "std": 18.389476324957513,
+          "count": 27
+        }
+      }
+    },
+    {
+      "ticker": "MMM",
+      "sector": "Industrials",
+      "kurtosis": 21.533172215520704,
+      "volatility": 0.27512478077012403,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.0186285335293839,
+      "avg_duration": 19.274193548387096,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 31.666666666666668,
+          "std": 21.791945504908202,
+          "count": 3
+        },
+        "Bear": {
+          "mean": 16.928571428571427,
+          "std": 23.208570725101552,
+          "count": 28
+        }
+      }
+    },
+    {
+      "ticker": "RTX",
+      "sector": "Industrials",
+      "kurtosis": 9.04885183041521,
+      "volatility": 0.23452967405527272,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.06801414077904679,
+      "avg_duration": 27.790697674418606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 47.05882352941177,
+          "std": 55.07478401146966,
+          "count": 17
+        },
+        "Low Alpha": {
+          "mean": 17.11111111111111,
+          "std": 21.74827934161661,
+          "count": 18
+        }
+      }
+    },
+    {
+      "ticker": "LMT",
+      "sector": "Industrials",
+      "kurtosis": 14.745170845118995,
+      "volatility": 0.22130213688329278,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.02743549212841187,
+      "avg_duration": 25.425531914893618,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 20.95,
+          "std": 21.065315093774412,
+          "count": 20
+        },
+        "Neutral": {
+          "mean": 65.77777777777777,
+          "std": 60.63145091044888,
+          "count": 9
+        },
+        "Bear": {
+          "mean": 10.222222222222221,
+          "std": 12.655940877950277,
+          "count": 18
+        }
+      }
+    },
+    {
+      "ticker": "FDX",
+      "sector": "Industrials",
+      "kurtosis": 24.653066288340824,
+      "volatility": 0.32947591148735533,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.003218583531654094,
+      "avg_duration": 19.916666666666668,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 17.103448275862068,
+          "std": 21.210512727851704,
+          "count": 29
+        },
+        "Bull": {
+          "mean": 21.166666666666668,
+          "std": 25.98984844554162,
+          "count": 24
+        }
+      }
+    },
+    {
+      "ticker": "LIN",
+      "sector": "Materials",
+      "kurtosis": 3.59470832763638,
+      "volatility": 0.2073950699136283,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.14739014281555415,
+      "avg_duration": 29.146341463414632,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 13.733333333333333,
+          "std": 12.845059577734762,
+          "count": 15
+        },
+        "Neutral": {
+          "mean": 60.81818181818182,
+          "std": 63.11867348216976,
+          "count": 11
+        },
+        "Bull": {
+          "mean": 21.333333333333332,
+          "std": 29.048618249793265,
+          "count": 15
+        }
+      }
+    },
+    {
+      "ticker": "APD",
+      "sector": "Materials",
+      "kurtosis": 16.861316109634807,
+      "volatility": 0.2618611113623404,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.01867489440423277,
+      "avg_duration": 20.964912280701753,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 27.0,
+          "std": 23.432004257626186,
+          "count": 17
+        },
+        "Neutral": {
+          "mean": 24.294117647058822,
+          "std": 26.137115160769667,
+          "count": 17
+        },
+        "Bull": {
+          "mean": 14.043478260869565,
+          "std": 13.346480600646766,
+          "count": 23
+        }
+      }
+    },
+    {
+      "ticker": "ECL",
+      "sector": "Materials",
+      "kurtosis": 5.46722869993164,
+      "volatility": 0.2380717059058263,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.07899113540018848,
+      "avg_duration": 27.790697674418606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 17.666666666666668,
+          "std": 21.90890230020664,
+          "count": 9
+        },
+        "Neutral": {
+          "mean": 57.214285714285715,
+          "std": 60.21411625124433,
+          "count": 14
+        },
+        "Bull": {
+          "mean": 11.75,
+          "std": 12.68020110250622,
+          "count": 20
+        }
+      }
+    },
+    {
+      "ticker": "SHW",
+      "sector": "Materials",
+      "kurtosis": 3.929167047585268,
+      "volatility": 0.25751772513912136,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.08698378044846329,
+      "avg_duration": 23.431372549019606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 48.166666666666664,
+          "std": 90.10811407538293,
+          "count": 6
+        },
+        "Bull": {
+          "mean": 21.5,
+          "std": 24.54927018602929,
+          "count": 24
+        },
+        "Bear": {
+          "mean": 18.571428571428573,
+          "std": 25.522299173507875,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "FCX",
+      "sector": "Materials",
+      "kurtosis": 3.3696225379852427,
+      "volatility": 0.44356719332565114,
+      "jump_freq": 0.8368200836820083,
+      "vol_cluster": 0.14971860442846846,
+      "avg_duration": 34.142857142857146,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 22.1875,
+          "std": 30.875189776744694,
+          "count": 16
+        },
+        "Neutral": {
+          "mean": 54.15384615384615,
+          "std": 136.85862787441877,
+          "count": 13
+        },
+        "Crisis": {
+          "mean": 22.666666666666668,
+          "std": 29.061238025169462,
+          "count": 6
+        }
+      }
+    },
+    {
+      "ticker": "NEM",
+      "sector": "Materials",
+      "kurtosis": 4.887043695724192,
+      "volatility": 0.3591179352607691,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.020105877711013624,
+      "avg_duration": 14.058823529411764,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 12.794871794871796,
+          "std": 18.454628336405083,
+          "count": 39
+        },
+        "Bear": {
+          "mean": 18.0,
+          "std": 18.226354544998845,
+          "count": 10
+        }
+      }
+    },
+    {
+      "ticker": "DOW",
+      "sector": "Materials",
+      "kurtosis": 12.152816378140576,
+      "volatility": 0.3165014600507149,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.15111369011591816,
+      "avg_duration": 38.54838709677419,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "High Alpha": {
+          "mean": 54.142857142857146,
+          "std": 97.94521584091001,
+          "count": 14
+        },
+        "Neutral": {
+          "mean": 86.0,
+          "std": 25.0,
+          "count": 2
+        },
+        "Bear": {
+          "mean": 17.666666666666668,
+          "std": 28.325881372969764,
+          "count": 15
+        }
+      }
+    },
+    {
+      "ticker": "DD",
+      "sector": "Materials",
+      "kurtosis": 10.270866820116318,
+      "volatility": 0.2928132657644159,
+      "jump_freq": 1.6736401673640167,
+      "vol_cluster": 0.17534916768978048,
+      "avg_duration": 34.142857142857146,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 13.928571428571429,
+          "std": 15.627193723553482,
+          "count": 14
+        },
+        "Neutral": {
+          "mean": 67.33333333333333,
+          "std": 71.94944212585823,
+          "count": 12
+        },
+        "Bear": {
+          "mean": 21.333333333333332,
+          "std": 22.19609575278199,
+          "count": 9
+        }
+      }
+    },
+    {
+      "ticker": "O",
+      "sector": "REITs",
+      "kurtosis": 1.373805763973916,
+      "volatility": 0.19046422775608107,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.10206514378595369,
+      "avg_duration": 16.59722222222222,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 33.6,
+          "std": 24.418026128252055,
+          "count": 5
+        },
+        "Bear": {
+          "mean": 10.411764705882353,
+          "std": 16.485497453749396,
+          "count": 34
+        },
+        "Neutral": {
+          "mean": 20.393939393939394,
+          "std": 25.96143923023949,
+          "count": 33
+        }
+      }
+    },
+    {
+      "ticker": "AMT",
+      "sector": "REITs",
+      "kurtosis": 2.515941738983516,
+      "volatility": 0.25821153633554794,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.029077312275353373,
+      "avg_duration": 22.12962962962963,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 22.136363636363637,
+          "std": 28.617056983785442,
+          "count": 22
+        },
+        "Bear": {
+          "mean": 28.57894736842105,
+          "std": 31.39446110965517,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "PLD",
+      "sector": "REITs",
+      "kurtosis": 3.6329525084142835,
+      "volatility": 0.27109396782588197,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.1611811896759917,
+      "avg_duration": 24.387755102040817,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 19.291666666666668,
+          "std": 26.587088292795222,
+          "count": 24
+        },
+        "Bear": {
+          "mean": 39.25,
+          "std": 11.321991874224253,
+          "count": 4
+        },
+        "Bull": {
+          "mean": 27.38095238095238,
+          "std": 43.768303589389554,
+          "count": 21
+        }
+      }
+    },
+    {
+      "ticker": "SPG",
+      "sector": "REITs",
+      "kurtosis": 3.042380305297515,
+      "volatility": 0.2701041534667754,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.16191575191765223,
+      "avg_duration": 20.964912280701753,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 16.37037037037037,
+          "std": 21.415031322169305,
+          "count": 27
+        },
+        "Neutral": {
+          "mean": 20.63157894736842,
+          "std": 33.444707749572174,
+          "count": 19
+        },
+        "Bear": {
+          "mean": 32.81818181818182,
+          "std": 41.38251317518325,
+          "count": 11
+        }
+      }
+    },
+    {
+      "ticker": "EQIX",
+      "sector": "REITs",
+      "kurtosis": 4.531363724912293,
+      "volatility": 0.27594932440931386,
+      "jump_freq": 1.1715481171548117,
+      "vol_cluster": 0.21893879120318827,
+      "avg_duration": 15.320512820512821,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 19.857142857142858,
+          "std": 23.19130730885772,
+          "count": 14
+        },
+        "Bear": {
+          "mean": 11.866666666666667,
+          "std": 13.64974562237537,
+          "count": 30
+        },
+        "Bull": {
+          "mean": 16.5,
+          "std": 24.792373115655597,
+          "count": 34
+        }
+      }
+    },
+    {
+      "ticker": "PSA",
+      "sector": "REITs",
+      "kurtosis": 2.6026647826513845,
+      "volatility": 0.23416868683215447,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.09689293069584794,
+      "avg_duration": 18.384615384615383,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 21.903225806451612,
+          "std": 28.618012417976605,
+          "count": 31
+        },
+        "Neutral": {
+          "mean": 35.666666666666664,
+          "std": 12.970050972229146,
+          "count": 3
+        },
+        "Bull": {
+          "mean": 13.193548387096774,
+          "std": 17.060460521785473,
+          "count": 31
+        }
+      }
+    },
+    {
+      "ticker": "DLR",
+      "sector": "REITs",
+      "kurtosis": 3.381912684642713,
+      "volatility": 0.28692952035224534,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.10803061210911898,
+      "avg_duration": 18.106060606060606,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 15.787878787878787,
+          "std": 17.774270774382423,
+          "count": 33
+        },
+        "Bull": {
+          "mean": 24.555555555555557,
+          "std": 30.161090133227802,
+          "count": 18
+        },
+        "Bear": {
+          "mean": 15.466666666666667,
+          "std": 19.690494040413398,
+          "count": 15
+        }
+      }
+    },
+    {
+      "ticker": "NEE",
+      "sector": "Utilities",
+      "kurtosis": 4.1724081983700785,
+      "volatility": 0.26911317682421454,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.06079240595353174,
+      "avg_duration": 19.59016393442623,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 18.0,
+          "std": 21.145752697477032,
+          "count": 21
+        },
+        "Neutral": {
+          "mean": 36.166666666666664,
+          "std": 50.15116039424102,
+          "count": 12
+        },
+        "Bear": {
+          "mean": 13.678571428571429,
+          "std": 14.88300462039209,
+          "count": 28
+        }
+      }
+    },
+    {
+      "ticker": "DUK",
+      "sector": "Utilities",
+      "kurtosis": 1.0359469041038336,
+      "volatility": 0.1791450000331502,
+      "jump_freq": 0.7531380753138075,
+      "vol_cluster": 0.1048912682320742,
+      "avg_duration": 18.96825396825397,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 56.0,
+          "std": 0.0,
+          "count": 1
+        },
+        "Low Alpha": {
+          "mean": 18.34375,
+          "std": 29.097475593898174,
+          "count": 32
+        }
+      }
+    },
+    {
+      "ticker": "SO",
+      "sector": "Utilities",
+      "kurtosis": 1.155049328154341,
+      "volatility": 0.18476159782305995,
+      "jump_freq": 0.8368200836820083,
+      "vol_cluster": 0.13775817617112776,
+      "avg_duration": 12.849462365591398,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 11.625,
+          "std": 17.585061131540034,
+          "count": 8
+        },
+        "Bull": {
+          "mean": 12.902439024390244,
+          "std": 16.0666369635793,
+          "count": 41
+        },
+        "Bear": {
+          "mean": 13.022727272727273,
+          "std": 17.451867100378006,
+          "count": 44
+        }
+      }
+    },
+    {
+      "ticker": "D",
+      "sector": "Utilities",
+      "kurtosis": 2.2945286853862585,
+      "volatility": 0.2250363478613462,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.13573188077409293,
+      "avg_duration": 30.641025641025642,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 46.6,
+          "std": 27.803596889611242,
+          "count": 5
+        },
+        "Neutral": {
+          "mean": 39.8421052631579,
+          "std": 73.04667805256605,
+          "count": 19
+        },
+        "Bear": {
+          "mean": 13.666666666666666,
+          "std": 16.523384103210283,
+          "count": 15
+        }
+      }
+    },
+    {
+      "ticker": "AEP",
+      "sector": "Utilities",
+      "kurtosis": 1.6865242193739212,
+      "volatility": 0.19845981844249289,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.11015191331379572,
+      "avg_duration": 13.735632183908047,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 11.925,
+          "std": 19.2488798375386,
+          "count": 40
+        },
+        "Bull": {
+          "mean": 14.974358974358974,
+          "std": 14.807287151744386,
+          "count": 39
+        }
+      }
+    },
+    {
+      "ticker": "XEL",
+      "sector": "Utilities",
+      "kurtosis": 3.955646951830328,
+      "volatility": 0.20644300294177137,
+      "jump_freq": 1.00418410041841,
+      "vol_cluster": 0.18571241782427808,
+      "avg_duration": 16.36986301369863,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 46.0,
+          "std": 24.097026095903757,
+          "count": 3
+        },
+        "Bear": {
+          "mean": 15.305555555555555,
+          "std": 23.593571916996144,
+          "count": 36
+        },
+        "Bull": {
+          "mean": 14.882352941176471,
+          "std": 18.883177552087673,
+          "count": 34
+        }
+      }
+    },
+    {
+      "ticker": "SRE",
+      "sector": "Utilities",
+      "kurtosis": 37.5157077465794,
+      "volatility": 0.23113028117377685,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.017769140977971377,
+      "avg_duration": 17.83582089552239,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 60.0,
+          "std": 0.0,
+          "count": 1
+        },
+        "Bull": {
+          "mean": 19.696969696969695,
+          "std": 23.003932270552628,
+          "count": 33
+        }
+      }
+    },
+    {
+      "ticker": "VZ",
+      "sector": "Communication",
+      "kurtosis": 6.104971950069469,
+      "volatility": 0.2076325335283822,
+      "jump_freq": 1.5899581589958158,
+      "vol_cluster": 0.06837209484670306,
+      "avg_duration": 13.277777777777779,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 13.636363636363637,
+          "std": 27.66445940280754,
+          "count": 22
+        },
+        "Bear": {
+          "mean": 11.375,
+          "std": 17.368104147162025,
+          "count": 24
+        },
+        "Bull": {
+          "mean": 14.136363636363637,
+          "std": 21.54655731738611,
+          "count": 44
+        }
+      }
+    },
+    {
+      "ticker": "T",
+      "sector": "Communication",
+      "kurtosis": 7.431147699957931,
+      "volatility": 0.23766413771350325,
+      "jump_freq": 1.7573221757322177,
+      "vol_cluster": 0.03813140780479109,
+      "avg_duration": 11.95,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Neutral": {
+          "mean": 10.583333333333334,
+          "std": 16.39677305650922,
+          "count": 36
+        },
+        "Bear": {
+          "mean": 16.56,
+          "std": 26.302973215969327,
+          "count": 25
+        },
+        "Bull": {
+          "mean": 10.256410256410257,
+          "std": 8.649049002763396,
+          "count": 39
+        }
+      }
+    },
+    {
+      "ticker": "TMUS",
+      "sector": "Communication",
+      "kurtosis": 7.515094107143648,
+      "volatility": 0.23491143571128628,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.01682116726796929,
+      "avg_duration": 12.849462365591398,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 14.5,
+          "std": 22.803930160593605,
+          "count": 26
+        },
+        "Neutral": {
+          "mean": 12.870967741935484,
+          "std": 20.568911611213835,
+          "count": 31
+        },
+        "Bull": {
+          "mean": 11.63888888888889,
+          "std": 12.468076519606601,
+          "count": 36
+        }
+      }
+    },
+    {
+      "ticker": "DIS",
+      "sector": "Communication",
+      "kurtosis": 8.138005087737804,
+      "volatility": 0.2905943767059018,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.10300023335531328,
+      "avg_duration": 33.19444444444444,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 13.0,
+          "std": 13.81510560427038,
+          "count": 14
+        },
+        "Bear": {
+          "mean": 56.4,
+          "std": 72.64048457988149,
+          "count": 15
+        },
+        "Neutral": {
+          "mean": 23.857142857142858,
+          "std": 27.730481276687833,
+          "count": 7
+        }
+      }
+    },
+    {
+      "ticker": "NFLX",
+      "sector": "Communication",
+      "kurtosis": 53.03687638829447,
+      "volatility": 0.4463935834322897,
+      "jump_freq": 1.3389121338912133,
+      "vol_cluster": 0.006714805646015959,
+      "avg_duration": 34.142857142857146,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 25.0625,
+          "std": 34.275480941191766,
+          "count": 16
+        },
+        "Neutral": {
+          "mean": 39.705882352941174,
+          "std": 37.45862769679818,
+          "count": 17
+        },
+        "Crisis": {
+          "mean": 59.5,
+          "std": 0.5,
+          "count": 2
+        }
+      }
+    },
+    {
+      "ticker": "CMCSA",
+      "sector": "Communication",
+      "kurtosis": 6.9064852137810355,
+      "volatility": 0.26077672776508565,
+      "jump_freq": 1.506276150627615,
+      "vol_cluster": 0.06631421302989096,
+      "avg_duration": 14.226190476190476,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 12.727272727272727,
+          "std": 19.566936749887674,
+          "count": 33
+        },
+        "Bear": {
+          "mean": 15.321428571428571,
+          "std": 25.388486664274435,
+          "count": 28
+        }
+      }
+    },
+    {
+      "ticker": "SPY",
+      "sector": "Indices/ETFs",
+      "kurtosis": 8.307606814143407,
+      "volatility": 0.1715250505215998,
+      "jump_freq": 1.1715481171548117,
+      "vol_cluster": 0.2037820770456278,
+      "avg_duration": 22.98076923076923,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 39.73684210526316,
+          "std": 43.90041614149144,
+          "count": 19
+        },
+        "Bear": {
+          "mean": 10.136363636363637,
+          "std": 14.407370129540878,
+          "count": 22
+        }
+      }
+    },
+    {
+      "ticker": "QQQ",
+      "sector": "Indices/ETFs",
+      "kurtosis": 4.76525722534186,
+      "volatility": 0.22542322757106584,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.14396831842008817,
+      "avg_duration": 25.97826086956522,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bear": {
+          "mean": 11.470588235294118,
+          "std": 17.064299323988816,
+          "count": 17
+        },
+        "Bull": {
+          "mean": 11.631578947368421,
+          "std": 15.795437470211017,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "IWM",
+      "sector": "Indices/ETFs",
+      "kurtosis": 1.7390003920174433,
+      "volatility": 0.22607140097922465,
+      "jump_freq": 0.9205020920502093,
+      "vol_cluster": 0.15298657635521037,
+      "avg_duration": 14.397590361445783,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Low Alpha": {
+          "mean": 13.976190476190476,
+          "std": 18.016511071842242,
+          "count": 42
+        },
+        "Neutral": {
+          "mean": 17.77777777777778,
+          "std": 18.146182811194315,
+          "count": 9
+        },
+        "Bull": {
+          "mean": 14.0,
+          "std": 20.834166650000668,
+          "count": 32
+        }
+      }
+    },
+    {
+      "ticker": "DIA",
+      "sector": "Indices/ETFs",
+      "kurtosis": 5.88511428582658,
+      "volatility": 0.147143774988656,
+      "jump_freq": 1.2552301255230125,
+      "vol_cluster": 0.15516384082323445,
+      "avg_duration": 21.727272727272727,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 37.0,
+          "std": 48.59355238437846,
+          "count": 21
+        },
+        "Bear": {
+          "mean": 15.142857142857142,
+          "std": 11.153840740538934,
+          "count": 7
+        },
+        "Neutral": {
+          "mean": 11.555555555555555,
+          "std": 16.200899228205483,
+          "count": 27
+        }
+      }
+    },
+    {
+      "ticker": "VTI",
+      "sector": "Indices/ETFs",
+      "kurtosis": 7.0211711619926245,
+      "volatility": 0.17513366571980338,
+      "jump_freq": 1.0878661087866108,
+      "vol_cluster": 0.19707794394559336,
+      "avg_duration": 22.98076923076923,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Bull": {
+          "mean": 37.95,
+          "std": 44.91711811770653,
+          "count": 20
+        },
+        "Bear": {
+          "mean": 10.173913043478262,
+          "std": 12.274583757798924,
+          "count": 23
+        }
+      }
+    },
+    {
+      "ticker": "COIN",
+      "sector": "High Volatility",
+      "kurtosis": 2.5737257702571235,
+      "volatility": 0.8649026916176684,
+      "jump_freq": 1.1555555555555554,
+      "vol_cluster": 0.10402129329959171,
+      "avg_duration": 17.578125,
+      "n_observations": 1125,
+      "start_date": "2021-07-09",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 9.592592592592593,
+          "std": 11.143040542765824,
+          "count": 27
+        },
+        "Crisis": {
+          "mean": 22.20689655172414,
+          "std": 26.772836607722038,
+          "count": 29
+        }
+      }
+    },
+    {
+      "ticker": "MARA",
+      "sector": "High Volatility",
+      "kurtosis": 1.3745997496238438,
+      "volatility": 1.0673209996106487,
+      "jump_freq": 0.8368200836820083,
+      "vol_cluster": 0.03264309558704679,
+      "avg_duration": 21.727272727272727,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Crisis": {
+          "mean": 26.17391304347826,
+          "std": 28.8288083179988,
+          "count": 23
+        },
+        "Bear": {
+          "mean": 17.53846153846154,
+          "std": 18.40407724314364,
+          "count": 13
+        },
+        "Momentum": {
+          "mean": 19.210526315789473,
+          "std": 30.334241460536795,
+          "count": 19
+        }
+      }
+    },
+    {
+      "ticker": "RIOT",
+      "sector": "High Volatility",
+      "kurtosis": 0.4458810716860544,
+      "volatility": 0.9474284895493458,
+      "jump_freq": 0.41841004184100417,
+      "vol_cluster": 0.034997548585623754,
+      "avg_duration": 23.9,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Crisis": {
+          "mean": 40.5,
+          "std": 28.5,
+          "count": 2
+        },
+        "Momentum": {
+          "mean": 25.875,
+          "std": 38.23535939851139,
+          "count": 24
+        }
+      }
+    },
+    {
+      "ticker": "GME",
+      "sector": "High Volatility",
+      "kurtosis": 17.72999347848595,
+      "volatility": 0.9585941927461086,
+      "jump_freq": 1.7573221757322177,
+      "vol_cluster": 0.4429935219558351,
+      "avg_duration": 15.933333333333334,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Momentum": {
+          "mean": 11.916666666666666,
+          "std": 14.714646898017408,
+          "count": 36
+        },
+        "Crisis": {
+          "mean": 21.142857142857142,
+          "std": 29.63795140129132,
+          "count": 7
+        },
+        "Bear": {
+          "mean": 19.3125,
+          "std": 22.33332361629142,
+          "count": 32
+        }
+      }
+    },
+    {
+      "ticker": "AMC",
+      "sector": "High Volatility",
+      "kurtosis": 18.999434734109766,
+      "volatility": 1.1001138147132756,
+      "jump_freq": 1.4225941422594142,
+      "vol_cluster": 0.141407332872306,
+      "avg_duration": 85.35714285714286,
+      "n_observations": 1195,
+      "start_date": "2021-03-30",
+      "end_date": "2025-12-30",
+      "regime_durations": {
+        "Crisis": {
+          "mean": 184.8,
+          "std": 111.93283700505407,
+          "count": 5
+        }
+      }
+    }
+  ],
+  "validation_report": {
+    "test1_expanded": {
+      "n_stocks": 110,
+      "pearson_r": 0.34619925674030183,
+      "pearson_p": 0.00021161065608685473,
+      "spearman_r": 0.27036959923480536,
+      "spearman_p": 0.00428107434225867,
+      "status": "PASS"
+    },
+    "test2_outliers": {
+      "r_all": 0.34619925674030183,
+      "r_no_meta": 0.2900815603117965,
+      "r_no_influential": 0.1264096573861245,
+      "delta_no_outliers": -0.05611769642850534,
+      "delta_no_influential": -0.21978959935417733,
+      "influential_stocks": [
+        "AMC",
+        "COST",
+        "NFLX",
+        "META",
+        "K"
+      ],
+      "is_fragile": "False",
+      "status": "ROBUST"
+    },
+    "test3_sectors": {
+      "sector_correlations": {
+        "Communication": {
+          "r": 0.6696969334909298,
+          "p": 0.14563212222436,
+          "n": 6
+        },
+        "Consumer Discretionary": {
+          "r": 0.16933016518659333,
+          "p": 0.6400294464098912,
+          "n": 10
+        },
+        "Consumer Staples": {
+          "r": 0.758793437067542,
+          "p": 0.010938742004297583,
+          "n": 10
+        },
+        "Energy": {
+          "r": 0.47818887690176737,
+          "p": 0.16212357870699146,
+          "n": 10
+        },
+        "Financials": {
+          "r": -0.2013093210049413,
+          "p": 0.5770520699104751,
+          "n": 10
+        },
+        "Healthcare": {
+          "r": -0.3004850778302365,
+          "p": 0.3988922324594062,
+          "n": 10
+        },
+        "High Volatility": {
+          "r": 0.5807123119573356,
+          "p": 0.3045779470627668,
+          "n": 5
+        },
+        "Indices/ETFs": {
+          "r": 0.6906933809759728,
+          "p": 0.1966362619741795,
+          "n": 5
+        },
+        "Industrials": {
+          "r": 0.2999776772445068,
+          "p": 0.3997282672087168,
+          "n": 10
+        },
+        "Large Cap Tech": {
+          "r": 0.7739277426336214,
+          "p": 0.0031364479257453195,
+          "n": 12
+        },
+        "Materials": {
+          "r": 0.08465150358722988,
+          "p": 0.8420350535444845,
+          "n": 8
+        },
+        "REITs": {
+          "r": 0.006308994918422066,
+          "p": 0.9892897307320678,
+          "n": 7
+        },
+        "Utilities": {
+          "r": -0.03952681770486505,
+          "p": 0.9329495975593324,
+          "n": 7
+        }
+      },
+      "n_positive": 10,
+      "n_significant": 2,
+      "n_sectors": 13,
+      "status": "CONSISTENT"
+    },
+    "test4_time": {
+      "period_results": {},
+      "is_stable": true,
+      "status": "STABLE"
+    }
+  },
+  "generated": "2025-12-31T09:13:30.627882"
+}

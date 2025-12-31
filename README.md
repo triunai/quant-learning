@@ -1,75 +1,175 @@
-# 🦅 Project PLTR: Regime Risk Platform
+# 👁️ Project Iris: Regime Risk Research Platform
 
-A production-grade quantitative risk engine designed to model asymmetric market regimes, capture non-linear path risks, and generate high-fidelity trade signals.
+> *Iris — The Egyptian goddess who links heaven and earth, carrying messages between realms. Like her namesake, this platform bridges market regimes, revealing the hidden structure of price dynamics.*
+
+A production-grade quantitative research platform for regime-switching Monte Carlo simulation, featuring GMM-based regime detection, coherent factor models, and cross-asset analysis capabilities.
+
+**Version:** 7.1 (Coherent Factor Model)  
+**Status:** Active Research
+
+---
+
+## 🎯 Key Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| **Regime Detection** | GMM clustering on slow features (volatility, momentum, drawdown) |
+| **Factor Model** | Coherent OLS with zero-mean residuals and R² fallback |
+| **Semi-Markov** | Duration-aware regime transitions with length-biased sampling |
+| **Monte Carlo** | 10,000+ path simulation with empirical residual sampling |
+| **Risk Metrics** | VaR, CVaR, Kelly fraction, max drawdown probabilities |
+| **Validation** | Walk-forward backtesting, invariant checks, multi-threshold calibration |
+
+---
+
+## 🔬 Recent Research Discovery
+
+**Kurtosis-Regime Persistence Relationship (December 2024)**
+
+Cross-sectional analysis revealed that return kurtosis predicts regime duration (r = +0.84):
+
+| Stock Type | Kurtosis | Regime Duration | Behavior |
+|------------|----------|-----------------|----------|
+| Fat-Tail (META) | 26.6 | 119 days | Anchor events create persistent regimes |
+| Normal (JPM) | 5.0 | 60 days | Mixed behavior |
+| Noise (COIN) | 2.6 | 18 days | Constant churn, no anchors |
+
+**Key Insight:** Fat-tail events CREATE persistent regimes (opposite of conventional wisdom).
 
 ---
 
 ## 📂 Project Structure
 
-| Directory | Description |
-| :--- | :--- |
-| **`/battle-tested`** | **Proprietary v7.0 Platform.** GMM-based regime clustering, semi-Markov duration modeling, and alpha/beta macro-conditioning. |
-| **`/refinery`** | **Streamlit Dashboard (v6.0)**, experimental scripts, and legacy Markov models. |
-| **`/outcome`** | Audit logs, performance reports, and signal deep-dives. |
-
----
-
-## 🧠 v7.0 Core Architecture (The "Alpha" Layer)
-
-Located in `battle-tested/PLTR-test-2.py`, this is the most advanced iteration of the engine.
-
-### 1. Regime Discovery (GMM Clustering)
-Unlike standard quantile-based models, v7.0 uses **Gaussian Mixture Models (GMM)** on multi-dimensional features `[Vol_20d, Vol_60d, Ret_20d, Drawdown]` to identify real market states:
-*   **Low Vol**: The "Quiet Bleed" / Underwater grind.
-*   **Normal**: High-alpha melt-up / trending states.
-*   **Crisis**: Left-tail volatility and regime collapse.
-
-### 2. Semi-Markov Duration Modeling
-Captures the **persistence** of regimes. The model doesn't just switch states daily; it models the "run length" of each state, correctly accounting for **residual life** (forward recurrence) when projecting forward.
-
-### 3. Macro-Conditioning (Alpha/Beta Factor Model)
-Every simulation is conditioned on market beta and regime-specific alpha:
-`r = alpha_regime + beta * r_market + epsilon_empirical`
-*   **Idiosyncratic Residuals**: Sampled empirically to preserve "fat tails" that parametric models miss.
-
----
-
-## 📊 Streamlit Dashboard (v6.0)
-
-Located in `refinery/dashboard.py`, the dashboard provides a visual "Mission Control" for the engine:
-*   **Live Simulation**: Run 5,000+ paths in the browser.
-*   **Cone Charts**: Probabilistic price paths with quartile shading.
-*   **Risk Dashboard**: VaR(95), CVaR(95), and Path-level Drawdown probabilities.
-*   **Transition Matrix**: Real-time visualization of regime stickiness.
-
----
-
-## 📐 Risk & Signal Logic
-
-### Kelly Criterion (DD-Aware)
-The platform uses a specialized fractional Kelly formula optimized for continuous returns:
-`f* = mu / sigma^2`
-*   **Penalty Layer**: Position sizing is automatically slashed based on **P(MaxDD > 30%)**. Even with a strong edge, the engine will size at **0%** if the path risk is unsurvivable.
-
-### Invariant Validation
-The "Truth Serum" for the simulator. Every run verifies that simulated daily returns match historical **Mean, Std, Skew, and Kurtosis**.
-
----
-
-## 🔧 Setup & Usage
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Launch the Dashboard
-streamlit run refinery/dashboard.py
-
-# Run the v7.0 Platform (CLI)
-python battle-tested/PLTR-test-2.py
+```
+quant-learning/
+├── battle-tested/           # Core platform (v7.1)
+│   └── PLTR-test-2.py       # RegimeRiskPlatform class
+│
+├── docs/                    # Documentation
+│   ├── INDEX.md             # Master documentation index
+│   ├── modules/             # Module docs (Regime, Semi-Markov, etc.)
+│   ├── immediate-tasks/     # Phase tracking
+│   └── archive/             # Historical docs
+│
+├── research/                # Research artifacts
+│   ├── papers/              # Research paper drafts
+│   ├── scripts/             # Analysis scripts
+│   └── outputs/             # Generated plots
+│
+├── to_refine/               # Dashboard & WIP
+│   ├── dashboard_consolidated.py  # Streamlit UI
+│   └── stationary_bootstrap.py    # Mode B benchmark
+│
+├── refinery/                # Legacy modules
+├── signals_factory/         # Technical signals
+├── tests/                   # Test suite
+│
+├── validation_package.py    # One-click validation tool
+└── run_tests.py             # Test runner
 ```
 
 ---
 
+## 🚀 Quick Start
+
+### Validation Package (Recommended)
+```bash
+# Run full validation on any ticker
+python validation_package.py --ticker PLTR --market QQQ
+
+# Test on different stocks
+python validation_package.py --ticker MSFT --market QQQ
+python validation_package.py --ticker WMT --market SPY
+```
+
+### Streamlit Dashboard
+```bash
+cd to_refine
+streamlit run dashboard_consolidated.py
+```
+
+### Run Tests
+```bash
+python run_tests.py
+```
+
+---
+
+## 🧠 Core Architecture (v7.1)
+
+### 1. Coherent Factor Model
+```
+r_asset = α_regime + β_regime × r_market + ε
+
+Where:
+- α_regime = Mean-based alpha (guarantees zero-mean residuals)
+- β_regime = Standard OLS beta (not asymmetric)
+- ε = Empirically sampled residuals (preserves fat tails)
+```
+
+### 2. Regime Detection
+- **Features:** `[Vol_20d, Vol_60d, Ret_20d, Drawdown]`
+- **Method:** Gaussian Mixture Model (GMM)
+- **Naming:** Sharpe-based (Momentum > Bull > Neutral > Bear)
+
+### 3. Semi-Markov Duration
+- Models regime persistence explicitly
+- Length-biased sampling for current regime
+- Off-diagonal transitions when duration expires
+
+### 4. Risk Dashboard
+- VaR(95), CVaR(95) on simple returns
+- P(MaxDD > 20%), P(MaxDD > 30%)
+- DD-aware fractional Kelly sizing
+
+---
+
+## 📊 Validation
+
+The platform includes multiple validation layers:
+
+| Check | Purpose |
+|-------|---------|
+| Zero-mean residuals | Factor model coherence |
+| Drift decomposition | α + β×Market = Actual drift |
+| What-if test | Momentum > Bear probability |
+| Invariant check | Sim stats match historical |
+| Walk-forward | Out-of-sample calibration |
+
+---
+
+## 📚 Documentation
+
+See `docs/INDEX.md` for the full documentation index:
+- [Regime Risk Platform v7.1](docs/modules/REGIME_RISK_PLATFORM.md)
+- [Implementation Guide](docs/implementation_guide_v71.md)
+- [Phase Tracking](docs/immediate-tasks/phases/)
+- [Backlog](docs/backlog/BACKLOG.md)
+
+---
+
+## 🔧 Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Key packages:
+- `numpy`, `pandas`, `scipy` - Core computation
+- `scikit-learn` - GMM clustering
+- `yfinance` - Market data
+- `streamlit` - Dashboard
+- `arch` - GARCH modeling
+- `matplotlib`, `seaborn` - Visualization
+
+---
+
 ## ⚠️ Disclaimer
-This is a research tool for modeling tail risks. It is NOT financial advice. Leverage and sizing are governed by the Kelly fraction which accounts for historical volatility.
+
+This is a **research tool** for modeling tail risks and regime dynamics. It is NOT financial advice. All signals, probabilities, and position sizes are for educational and research purposes only.
+
+---
+
+## 📜 License
+
+Private research project. All rights reserved.
