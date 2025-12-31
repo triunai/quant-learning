@@ -1,9 +1,16 @@
 # Phase 4: Implement Sector-Based Regime Parameters
 
 **Estimated Time:** 3-4 hours  
-**Priority:** HIGH - Actionable findings from Phase 3  
-**Status:** 🔜 READY TO START  
+**Priority:** MEDIUM - Superseded by Binary Strategy  
+**Status:** 🔄 PARTIALLY COMPLETED (Pivoted to Binary)  
 **Depends On:** Phase 3 (COMPLETED)
+
+> **NOTE (2025-12-31):** Walk-forward validation showed that the **SIMPLE Binary strategy** 
+> (Sharpe 1.40 OOS) outperforms complex sector implementations. See 
+> `docs/sessions/2025-12-31-binary-strategy-validated.md` for details.
+> 
+> This phase's learnings are incorporated, but the complex sector-specific
+> sizing was found to be overfitted.
 
 ---
 
