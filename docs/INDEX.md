@@ -2,7 +2,7 @@
 
 > **Last Updated:** 2025-12-31  
 > **Platform Version:** v7.1 (Coherent Factor Model)  
-> **LATEST:** 🎯 Binary Regime Strategy OOS Validated (Sharpe 1.40)
+> **LATEST:** 🔬 Binary Strategy failed multi-period test → Pivoting to research
 
 ---
 
@@ -10,25 +10,28 @@
 
 | Document | Purpose |
 |----------|---------|
+| **[Quant Learning Roadmap](roadmaps/quant-learning-roadmap.md)** | **🎯 Active: 12-week learning plan** |
 | [REGIME_RISK_PLATFORM.md](modules/REGIME_RISK_PLATFORM.md) | Main platform documentation (v7.1) |
 | [implementation_guide_v71.md](implementation_guide_v71.md) | Bug fixes and new features |
 | [BACKLOG.md](backlog/BACKLOG.md) | Engineering task tracker |
 | [ai_validation_workflow.md](workflows/ai_validation_workflow.md) | Validation workflow |
-| **[2025-12-31-binary-strategy-validated.md](sessions/2025-12-31-binary-strategy-validated.md)** | **🎯 Latest: OOS Validated Strategy** |
+| [2025-12-31-binary-strategy-validated.md](sessions/2025-12-31-binary-strategy-validated.md) | Session notes |
 
 ---
 
-## 🎯 Production-Ready Strategy
+## 🔬 Current Focus: Research & Learning
 
-**RegimeBinary Signals** - Walk-forward validated trading strategy
+**Binary Strategy Status:** Archived (COVID-only, failed multi-period test)
 
-| Metric | Value | Status |
-|--------|-------|--------|
-| OOS Sharpe | **1.40** | ✅ Validated |
-| Volatility | 8.0% | ✅ 50% less than SPY |
-| Rule | Bull=Buy, Bear=Cash | ✅ Simple & Explainable |
+| Finding | Status |
+|---------|--------|
+| Walk-forward validation | ✅ Passed |
+| Multi-period test (3 periods) | ❌ 1 of 3 passed |
+| Survivorship bias fix | ✅ Implemented |
 
-**Dashboard:** `research/dashboards/regime_binary_dashboard.py`
+**Pivot:** Focus on understanding market structure before building strategies.
+
+**Active Prototype:** `research/prototypes/regime_scanner.py`
 
 ---
 
