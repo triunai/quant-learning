@@ -1177,29 +1177,29 @@ class RegimeRiskEngine:
             return None
 
         # Calculate calibration metrics
-        predictions = np.array(predictions)
-        actuals = np.array(actuals)
+        predictions_arr = np.array(predictions)
+        actuals_arr = np.array(actuals)
 
         # Brier score
-        brier = np.mean((predictions - actuals) ** 2)
+        brier = np.mean((predictions_arr - actuals_arr) ** 2)
 
         # Calibration error
-        cal_error = abs(np.mean(predictions) - np.mean(actuals))
+        cal_error = abs(np.mean(predictions_arr) - np.mean(actuals_arr))
 
         # Print results
         print(f"    Target: +{target_pct:.0%} move (mult={target_mult:.2f})")
         print(f"    Valid folds: {len(predictions)}")
         print(f"    Brier Score: {brier:.3f} (0.25 = random, 0 = perfect)")
         print(f"    Calibration Error: {cal_error:.3f}")
-        print(f"    Mean Predicted: {np.mean(predictions):.1%}")
-        print(f"    Mean Actual:    {np.mean(actuals):.1%}")
+        print(f"    Mean Predicted: {np.mean(predictions_arr):.1%}")
+        print(f"    Mean Actual:    {np.mean(actuals_arr):.1%}")
 
         # Diagnostic
-        pred_mean = np.mean(predictions)
-        actual_mean = np.mean(actuals)
+        pred_mean = np.mean(predictions_arr)
+        actual_mean = np.mean(actuals_arr)
 
         if pred_mean > 0.01:  # Avoid division by zero
-            under_pred_ratio = actual_mean / pred_mean
+            under_pred_ratio = float(actual_mean / pred_mean)
             if under_pred_ratio > 1.5:
                 print(f"\n    [!] WARNING: Model is UNDER-PREDICTING by {under_pred_ratio:.1f}x")
             elif under_pred_ratio < 0.67:
@@ -1210,11 +1210,11 @@ class RegimeRiskEngine:
         return {
             'brier': brier,
             'cal_error': cal_error,
-            'mean_pred': float(np.mean(predictions)),
-            'mean_actual': float(np.mean(actuals)),
-            'under_prediction_ratio': float(under_pred_ratio),
-            'predictions': predictions.tolist(),
-            'actuals': actuals.tolist(),
+            'mean_pred': float(np.mean(predictions_arr)),
+            'mean_actual': float(np.mean(actuals_arr)),
+            'under_prediction_ratio': under_pred_ratio,
+            'predictions': predictions,
+            'actuals': actuals,
             'fold_details': fold_details,
         }
 
